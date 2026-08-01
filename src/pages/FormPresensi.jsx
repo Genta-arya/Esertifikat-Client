@@ -15,7 +15,6 @@ import {
   X,
 } from "lucide-react";
 
-import { db } from "../Config/Firebase";
 import {
   doc,
   getDoc,
@@ -26,6 +25,7 @@ import {
   where,
   getDocs,
 } from "firebase/firestore";
+import { db } from "../utils/Firebase";
 
 const FormPresensi = () => {
   const { slug } = useParams();
@@ -159,7 +159,8 @@ const FormPresensi = () => {
 
     try {
       const response = await fetch(
-        "http://localhost:8080/api/generate-certificate",
+        "https://esertifikat.apiservices.my.id/api/generate-certificate",
+        // "http://localhost:3080/api/generate-certificate",
         {
           method: "POST",
           headers: {
@@ -169,6 +170,8 @@ const FormPresensi = () => {
             nama,
             nomorSertifikat,
             templateUrl: templateUrl || kegiatan?.templateUrl,
+            emailPeserta: formData.email || emailParam || "",
+            namaKegiatan: kegiatan?.namaKegiatan || "",
           }),
         },
       );
@@ -216,9 +219,9 @@ const FormPresensi = () => {
   };
 
   // SUBMIT FORM PRESENSI
+  // SUBMIT FORM PRESENSI
   const handleSubmit = async (e) => {
     e.preventDefault();
-
     const namaClean = formData.nama.trim();
     const emailClean = formData.email.trim().toLowerCase();
     const instansiClean = formData.instansi.trim();
@@ -246,11 +249,11 @@ const FormPresensi = () => {
       );
       const existingPeserta = await getDocs(checkEmailQuery);
 
-      if (!existingPeserta.empty) {
-        alert("Email ini sudah pernah mengisi presensi untuk kegiatan ini!");
-        setIsSubmitting(false);
-        return;
-      }
+      // if (!existingPeserta.empty) {
+      //   alert("Email ini sudah pernah mengisi presensi untuk kegiatan ini!");
+      //   setIsSubmitting(false);
+      //   return;
+      // }
 
       let finalNomorResmi = "";
       const kodeUndangan = kegiatan?.kodeUndangan || "KPU-SKD";
@@ -297,6 +300,11 @@ const FormPresensi = () => {
         });
       });
 
+      // UPDATE URL TANPA TERTIMPA setSearchParams (Tetap menggunakan @)
+      const newUrl = `${window.location.pathname}?email=${emailClean}`;
+      window.history.replaceState(null, "", newUrl);
+
+      // Set State Success & Nomor Sertifikat
       setGeneratedNomor(finalNomorResmi);
       setIsSuccess(true);
 
@@ -305,6 +313,7 @@ const FormPresensi = () => {
         nama: namaClean,
         nomorSertifikat: finalNomorResmi,
         templateUrl: kegiatan?.templateUrl,
+        emailPeserta: emailClean,
       });
     } catch (error) {
       console.error("Gagal menyimpan presensi:", error);
@@ -391,6 +400,7 @@ const FormPresensi = () => {
                 nama: formData.nama,
                 nomorSertifikat: generatedNomor,
                 templateUrl: kegiatan?.templateUrl,
+                emailPeserta: formData.email,
               })
             }
             disabled={isGeneratingBackend}
@@ -495,7 +505,7 @@ const FormPresensi = () => {
               type="text"
               name="nama"
               maxLength={60}
-              placeholder="Contoh: Dr. M. Genta Arya, S.Kom."
+              placeholder="Contoh: Dr. xxxx"
               value={formData.nama}
               onChange={handleChange}
               className="w-full pl-10 pr-4 py-3 bg-slate-800/90 border border-slate-700/80 rounded-xl text-xs text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500/50 transition-all"

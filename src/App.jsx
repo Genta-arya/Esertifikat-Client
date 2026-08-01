@@ -4,12 +4,12 @@ import { onAuthStateChanged } from 'firebase/auth';
 
 
 // Import Halaman
-import LoginPage from './AdminPage/LoginPage';
-import DashboardPage from './AdminPage/DashboardPage'; // Buat file komponen ini jika belum ada
+import LoginPage from './pages/Admin/LoginPage';
+import DashboardPage from './pages/Admin/DashboardPage'; // Buat file komponen ini jika belum ada
 
-import { auth } from './Config/Firebase';
-import CreateKegiatan from './AdminPage/CreateKegiatan';
-import FormPresensi from './Form/FormPresensi';
+import CreateKegiatan from './pages/Admin/CreateKegiatan';
+import FormPresensi from './pages/FormPresensi';
+import { auth } from './utils/Firebase';
 
 // Komponen Proteksi Rute (Protected Route)
 const ProtectedRoute = ({ user, loading, children }) => {
