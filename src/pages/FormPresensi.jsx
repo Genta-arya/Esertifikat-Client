@@ -988,7 +988,7 @@ if (loadingKegiatan) {
               <button
                 type="submit"
                 disabled={isSearchingCertificate}
-                className="w-full py-3 bg-slate-800 hover:bg-slate-900 text-white font-bold rounded-lg flex items-center justify-center gap-2 transition-all disabled:opacity-60 disabled:cursor-not-allowed"
+                className="w-full py-3 text-white bg-red-700 hover:bg-red-800 transition-colors disabled:opacity-60 font-bold rounded-lg flex items-center justify-center gap-2 transition-all disabled:opacity-60 disabled:cursor-not-allowed"
               >
                 {isSearchingCertificate ? (
                   <>
