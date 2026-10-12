@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { useParams, useSearchParams } from "react-router-dom";
 import {
-  ShieldCheck,
   User,
   Mail,
   Building2,
@@ -11,8 +10,9 @@ import {
   AlertCircle,
   Loader2,
   Calendar,
-  Download,
   X,
+  MailCheck,
+  ShieldAlert,
 } from "lucide-react";
 
 import {
@@ -26,6 +26,7 @@ import {
   getDocs,
 } from "firebase/firestore";
 import { db } from "../utils/Firebase";
+import { Toaster, toast } from "sonner";
 
 const FormPresensi = () => {
   const { slug } = useParams();
@@ -36,13 +37,6 @@ const FormPresensi = () => {
   const [loadingKegiatan, setLoadingKegiatan] = useState(true);
   const [kegiatanError, setKegiatanError] = useState("");
 
-  // State untuk Toast Notification
-  const [toast, setToast] = useState({
-    show: false,
-    message: "",
-    type: "error",
-  });
-
   const [formData, setFormData] = useState({
     nama: "",
     email: emailParam || "",
@@ -50,23 +44,15 @@ const FormPresensi = () => {
     jabatan: "",
   });
 
+  const [instansiOptions, setInstansiOptions] = useState([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
   const [generatedNomor, setGeneratedNomor] = useState("");
 
-  // State khusus loading download via backend
-  const [isGeneratingBackend, setIsGeneratingBackend] = useState(false);
-  const [downloadSuccess, setDownloadSuccess] = useState(false);
+  // Modal konfirmasi sebelum submit
+  const [showConfirmModal, setShowConfirmModal] = useState(false);
 
   const currentYear = new Date().getFullYear();
-
-  // Fungsi helper untuk menampilkan toast
-  const showToast = (message, type = "error") => {
-    setToast({ show: true, message, type });
-    setTimeout(() => {
-      setToast({ show: false, message: "", type: "error" });
-    }, 5000);
-  };
 
   useEffect(() => {
     const fetchKegiatanAndCheckEmail = async () => {
@@ -88,8 +74,9 @@ const FormPresensi = () => {
         } else {
           const q = query(
             collection(db, "kegiatan"),
-            where("slug", "==", slug),
+            where("slug", "==", slug)
           );
+
           const querySnap = await getDocs(q);
 
           if (!querySnap.empty) {
@@ -111,9 +98,20 @@ const FormPresensi = () => {
 
         setKegiatan({ id: docId, ...data });
 
+        const formFields = data?.formConfig?.fields || [];
+        const instansiField = formFields.find(
+          (field) => field.key === "instansi"
+        );
+
+        setInstansiOptions(instansiField?.options || []);
+
         if (emailParam) {
           const pesertaRef = collection(db, "kegiatan", docId, "peserta");
-          const qEmail = query(pesertaRef, where("email", "==", emailParam));
+          const qEmail = query(
+            pesertaRef,
+            where("email", "==", emailParam)
+          );
+
           const pesertaSnap = await getDocs(qEmail);
 
           if (!pesertaSnap.empty) {
@@ -125,15 +123,19 @@ const FormPresensi = () => {
               instansi: pesertaData.instansi || "",
               jabatan: pesertaData.jabatan || "",
             });
+
             setGeneratedNomor(pesertaData.nomorSertifikat || "");
             setIsSuccess(true);
           } else {
-            showToast(
-              `Sertifikat dengan email "${emailParam}" belum terdaftar / belum melakukan presensi.`,
-              "error",
+            toast.error(
+              `Sertifikat dengan email "${emailParam}" belum terdaftar atau belum melakukan presensi.`
             );
+
             setSearchParams({});
-            setFormData((prev) => ({ ...prev, email: "" }));
+            setFormData((prev) => ({
+              ...prev,
+              email: "",
+            }));
           }
         }
       } catch (error) {
@@ -145,99 +147,67 @@ const FormPresensi = () => {
     };
 
     fetchKegiatanAndCheckEmail();
-  }, [slug, emailParam]);
-
-  // FUNGSI DOWNLOAD SERTIFIKAT MENEMBAK BACKEND EXPRESS
-  // FUNGSI DOWNLOAD SERTIFIKAT MENEMBAK BACKEND EXPRESS
-  const handleDownloadFromBackend = async ({
-    nama,
-    nomorSertifikat,
-    templateUrl,
-  }) => {
-    setIsGeneratingBackend(true);
-    setDownloadSuccess(false);
-
-    try {
-      const response = await fetch(
-        "https://esertifikat.apiservices.my.id/api/generate-certificate",
-        // "http://localhost:3080/api/generate-certificate",
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            nama,
-            nomorSertifikat,
-            templateUrl: templateUrl || kegiatan?.templateUrl,
-            emailPeserta: formData.email || emailParam || "",
-            namaKegiatan: kegiatan?.namaKegiatan || "",
-          }),
-        },
-      );
-
-      if (!response.ok) {
-        throw new Error("Gagal memproses sertifikat dari server backend.");
-      }
-
-      // 1. Bersihkan garis miring (/) pada nomorSertifikat agar aman digunakan sebagai nama file
-      const safeNomor = (nomorSertifikat || generatedNomor || "").replace(
-        /\//g,
-        "-",
-      );
-      const safeNama = (nama || formData.nama || "")
-        .trim()
-        .replace(/\s+/g, "_");
-
-      const blob = await response.blob();
-      const url = window.URL.createObjectURL(blob);
-      const link = document.createElement("a");
-      link.href = url;
-
-      // 2. Gunakan variabel yang sudah dibersihkan
-      link.download = `Sertifikat_${safeNomor}_${safeNama}_${kegiatan?.namaKegiatan}.pdf`;
-
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-
-      setDownloadSuccess(true);
-    } catch (error) {
-      console.error("Error downloading from backend:", error);
-      alert("Terjadi kesalahan saat mengunduh sertifikat: " + error.message);
-    } finally {
-      setIsGeneratingBackend(false);
-    }
-  };
+  }, [slug, emailParam, setSearchParams]);
 
   const handleChange = (e) => {
     const { name, value } = e.target;
+
     setFormData((prev) => ({
       ...prev,
       [name]: value,
     }));
   };
 
-  // SUBMIT FORM PRESENSI
-  // SUBMIT FORM PRESENSI
-  const handleSubmit = async (e) => {
-    e.preventDefault();
+  const validateForm = () => {
     const namaClean = formData.nama.trim();
     const emailClean = formData.email.trim().toLowerCase();
     const instansiClean = formData.instansi.trim();
     const jabatanClean = formData.jabatan.trim();
 
     if (!namaClean || !emailClean || !instansiClean || !jabatanClean) {
-      alert("Mohon lengkapi semua field!");
-      return;
+      toast.error("Mohon lengkapi semua data terlebih dahulu.");
+      return false;
+    }
+
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+    if (!emailRegex.test(emailClean)) {
+      toast.error("Format email tidak valid.");
+      return false;
     }
 
     if (!kegiatan?.id) {
-      alert("Data kegiatan tidak valid.");
-      return;
+      toast.error("Data kegiatan tidak valid.");
+      return false;
     }
 
+    if (
+      instansiOptions.length > 0 &&
+      !instansiOptions.includes(instansiClean)
+    ) {
+      toast.error("Pilihan instansi tidak valid.");
+      return false;
+    }
+
+    return true;
+  };
+
+  const handleOpenConfirmation = (e) => {
+    e.preventDefault();
+
+    if (!validateForm()) return;
+
+    setShowConfirmModal(true);
+  };
+
+  const handleSubmitPresensi = async () => {
+    setShowConfirmModal(false);
     setIsSubmitting(true);
+
+    const namaClean = formData.nama.trim();
+    const emailClean = formData.email.trim().toLowerCase();
+    const instansiClean = formData.instansi.trim();
+    const jabatanClean = formData.jabatan.trim();
 
     try {
       const targetDocId = kegiatan.id;
@@ -245,15 +215,10 @@ const FormPresensi = () => {
 
       const checkEmailQuery = query(
         pesertaRef,
-        where("email", "==", emailClean),
+        where("email", "==", emailClean)
       );
-      const existingPeserta = await getDocs(checkEmailQuery);
 
-      // if (!existingPeserta.empty) {
-      //   alert("Email ini sudah pernah mengisi presensi untuk kegiatan ini!");
-      //   setIsSubmitting(false);
-      //   return;
-      // }
+      const existingPeserta = await getDocs(checkEmailQuery);
 
       let finalNomorResmi = "";
       const kodeUndangan = kegiatan?.kodeUndangan || "KPU-SKD";
@@ -266,6 +231,7 @@ const FormPresensi = () => {
         const kegiatanSnap = await transaction.get(kegiatanRef);
 
         let currentLast = 0;
+
         if (counterSnap.exists()) {
           currentLast = counterSnap.data().lastNumber || 0;
         }
@@ -282,7 +248,7 @@ const FormPresensi = () => {
             lastNumber: nextNum,
             updatedAt: serverTimestamp(),
           },
-          { merge: true },
+          { merge: true }
         );
 
         transaction.set(newPesertaDocRef, {
@@ -292,6 +258,7 @@ const FormPresensi = () => {
           jabatan: jabatanClean,
           nomorSertifikat: finalNomorResmi,
           sertifikatTerkirim: false,
+          certificateStatus: "QUEUED",
           waktuPresensi: serverTimestamp(),
         });
 
@@ -300,24 +267,20 @@ const FormPresensi = () => {
         });
       });
 
-      // UPDATE URL TANPA TERTIMPA setSearchParams (Tetap menggunakan @)
       const newUrl = `${window.location.pathname}?email=${emailClean}`;
       window.history.replaceState(null, "", newUrl);
 
-      // Set State Success & Nomor Sertifikat
       setGeneratedNomor(finalNomorResmi);
       setIsSuccess(true);
 
-      // Trigger Auto Download langsung dari Backend Express
-      handleDownloadFromBackend({
-        nama: namaClean,
-        nomorSertifikat: finalNomorResmi,
-        templateUrl: kegiatan?.templateUrl,
-        emailPeserta: emailClean,
-      });
+      toast.success(
+        "Presensi berhasil dikirim. E-Sertifikat akan dikirim ke email Anda."
+      );
     } catch (error) {
       console.error("Gagal menyimpan presensi:", error);
-      alert("Terjadi kesalahan saat menyimpan presensi: " + error.message);
+      toast.error(
+        "Terjadi kesalahan saat menyimpan presensi. Silakan coba lagi."
+      );
     } finally {
       setIsSubmitting(false);
     }
@@ -337,10 +300,13 @@ const FormPresensi = () => {
   if (kegiatanError) {
     return (
       <div className="min-h-screen bg-slate-900 text-slate-100 flex items-center justify-center p-4">
+        <Toaster position="top-center" richColors />
+
         <div className="bg-slate-800/80 border border-slate-700 rounded-3xl p-6 text-center max-w-sm w-full space-y-4 shadow-2xl">
           <div className="w-12 h-12 rounded-2xl bg-red-500/10 border border-red-500/20 text-red-400 flex items-center justify-center mx-auto">
             <AlertCircle className="w-6 h-6" />
           </div>
+
           <div>
             <h2 className="text-base font-bold text-white">
               Presensi Tidak Tersedia
@@ -355,15 +321,18 @@ const FormPresensi = () => {
   if (isSuccess) {
     return (
       <div className="min-h-screen bg-slate-900 text-slate-100 flex items-center justify-center p-4">
-        <div className="bg-slate-800/90 border border-slate-700/80 rounded-3xl p-6 text-center max-w-sm w-full space-y-4 shadow-2xl relative overflow-hidden">
-          <div className="w-16 h-16 rounded-full bg-green-500/10 border border-green-500/20 text-green-400 flex items-center justify-center mx-auto animate-bounce">
-            <CheckCircle2 className="w-8 h-8" />
+        <Toaster position="top-center" richColors />
+
+        <div className="bg-slate-800/90 border border-slate-700/80 rounded-3xl p-6 text-center max-w-sm w-full space-y-4 shadow-2xl">
+          <div className="w-16 h-16 rounded-full bg-green-500/10 border border-green-500/20 text-green-400 flex items-center justify-center mx-auto">
+            <MailCheck className="w-8 h-8" />
           </div>
 
           <div className="space-y-1">
             <h2 className="text-lg font-bold text-white">
               {emailParam ? "Sertifikat Ditemukan!" : "Presensi Berhasil!"}
             </h2>
+
             <p className="text-xs text-slate-300">
               Halo,{" "}
               <span className="text-blue-400 font-semibold">
@@ -380,51 +349,53 @@ const FormPresensi = () => {
                 {kegiatan?.namaKegiatan}
               </span>
             </p>
+
             <p className="flex justify-between">
               <span>Nomor Sertifikat:</span>
               <span className="font-mono text-blue-400 font-bold">
                 {generatedNomor}
               </span>
             </p>
+
             <p className="flex justify-between">
               <span>Email:</span>
-              <span className="font-mono text-slate-200">{formData.email}</span>
+              <span className="font-mono text-slate-200">
+                {formData.email}
+              </span>
             </p>
           </div>
 
-          {/* TOMBOL UTAMA DOWNLOAD SERTIFIKAT VIA BACKEND */}
-          <button
-            type="button"
-            onClick={() =>
-              handleDownloadFromBackend({
-                nama: formData.nama,
-                nomorSertifikat: generatedNomor,
-                templateUrl: kegiatan?.templateUrl,
-                emailPeserta: formData.email,
-              })
-            }
-            disabled={isGeneratingBackend}
-            className="w-full py-3 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-bold rounded-xl text-xs shadow-lg shadow-blue-600/30 flex items-center justify-center gap-2 transition-all disabled:opacity-50 active:scale-[0.98]"
-          >
-            {isGeneratingBackend ? (
-              <>
-                <Loader2 className="w-4 h-4 animate-spin" />
-                <span>Memproses dari Server...</span>
-              </>
-            ) : (
-              <>
-                <Download className="w-4 h-4" />
-                <span>Unduh Sertifikat PDF</span>
-              </>
-            )}
-          </button>
+          <div className="bg-blue-500/10 border border-blue-500/20 rounded-2xl p-4 text-left">
+            <div className="flex items-start gap-2">
+              <MailCheck className="w-4 h-4 text-blue-400 mt-0.5 flex-shrink-0" />
 
-          <p className="text-[11px] text-slate-400 pt-1">
-            {isGeneratingBackend
-              ? "Sedang mengunduh file sertifikat dari server backend..."
-              : downloadSuccess
-                ? "✓ File PDF sertifikat resmi berhasil diunduh!"
-                : "Klik tombol 'Unduh Sertifikat PDF' di atas untuk mengunduh ulang."}
+              <p className="text-xs text-blue-100 leading-relaxed">
+                E-Sertifikat Anda sedang diproses secara otomatis dan akan
+                dikirim ke email:
+                <br />
+                <span className="font-semibold text-white">
+                  {formData.email}
+                </span>
+                .
+              </p>
+            </div>
+          </div>
+
+          <div className="bg-amber-500/10 border border-amber-500/20 rounded-2xl p-4 text-left">
+            <div className="flex items-start gap-2">
+              <ShieldAlert className="w-4 h-4 text-amber-400 mt-0.5 flex-shrink-0" />
+
+              <p className="text-xs text-amber-100 leading-relaxed">
+                Pastikan email Anda aktif dan periksa folder{" "}
+                <span className="font-semibold">Spam/Junk</span> jika email
+                belum diterima dalam beberapa menit.
+              </p>
+            </div>
+          </div>
+
+          <p className="text-[11px] text-slate-400">
+            Anda sudah boleh menutup halaman ini. Proses sertifikat tetap
+            berjalan di server.
           </p>
         </div>
       </div>
@@ -433,74 +404,142 @@ const FormPresensi = () => {
 
   return (
     <div className="min-h-screen bg-slate-900 text-slate-100 flex flex-col mx-auto shadow-2xl border-x border-slate-800 relative">
-      {toast.show && (
-        <div className="fixed top-4 left-1/2 -translate-x-1/2 z-50 w-11/12 max-w-md animate-bounce">
-          <div className="bg-red-500/90 backdrop-blur-md border border-red-400 text-white px-4 py-3 rounded-2xl shadow-2xl flex items-center justify-between gap-3">
-            <div className="flex items-center gap-2.5 text-xs font-medium">
-              <AlertCircle className="w-5 h-5 flex-shrink-0" />
-              <span>{toast.message}</span>
+      
+      {/* Modal Konfirmasi */}
+      {showConfirmModal && (
+        <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-slate-800 border border-slate-700 rounded-2xl w-full max-w-sm shadow-2xl overflow-hidden">
+            <div className="p-5 space-y-4">
+              <div className="flex items-start gap-3">
+                <div className="w-10 h-10 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-400 flex items-center justify-center flex-shrink-0">
+                  <AlertCircle className="w-5 h-5" />
+                </div>
+
+                <div>
+                  <h3 className="text-sm font-bold text-white">
+                    Pastikan Data Anda Sudah Benar
+                  </h3>
+
+                  <p className="text-xs text-slate-400 mt-1">
+                    Data ini akan digunakan untuk penerbitan dan pengiriman
+                    e-sertifikat.
+                  </p>
+                </div>
+              </div>
+
+              <div className="bg-slate-900/70 border border-slate-700 rounded-xl p-4 space-y-2 text-xs">
+                <div className="flex justify-between gap-3">
+                  <span className="text-slate-400">Nama</span>
+                  <span className="font-semibold text-white text-right">
+                    {formData.nama}
+                  </span>
+                </div>
+
+                <div className="flex justify-between gap-3">
+                  <span className="text-slate-400">Email</span>
+                  <span className="font-semibold text-white text-right break-all">
+                    {formData.email}
+                  </span>
+                </div>
+
+                <div className="flex justify-between gap-3">
+                  <span className="text-slate-400">Instansi</span>
+                  <span className="font-semibold text-white text-right">
+                    {formData.instansi}
+                  </span>
+                </div>
+
+                <div className="flex justify-between gap-3">
+                  <span className="text-slate-400">Jabatan</span>
+                  <span className="font-semibold text-white text-right">
+                    {formData.jabatan}
+                  </span>
+                </div>
+              </div>
+
+              <p className="text-[11px] text-slate-400 leading-relaxed">
+                Pastikan <span className="text-white font-semibold">nama</span>{" "}
+                dan{" "}
+                <span className="text-white font-semibold">email</span> sudah
+                benar. E-Sertifikat akan dikirim ke email tersebut.
+              </p>
             </div>
-            <button
-              onClick={() =>
-                setToast({ show: false, message: "", type: "error" })
-              }
-              className="text-white/80 hover:text-white p-1"
-            >
-              <X className="w-4 h-4" />
-            </button>
+
+            <div className="grid grid-cols-2 border-t border-slate-700">
+              <button
+                type="button"
+                onClick={() => setShowConfirmModal(false)}
+                disabled={isSubmitting}
+                className="py-3 text-xs font-semibold text-slate-300 hover:bg-slate-700/50 transition-colors disabled:opacity-50"
+              >
+                Periksa Lagi
+              </button>
+
+              <button
+                type="button"
+                onClick={handleSubmitPresensi}
+                disabled={isSubmitting}
+                className="py-3 text-xs font-bold text-white bg-blue-600 hover:bg-blue-500 transition-colors disabled:opacity-60 flex items-center justify-center gap-2"
+              >
+                {isSubmitting ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    Memproses...
+                  </>
+                ) : (
+                  <>
+                    <CheckCircle2 className="w-4 h-4" />
+                    Ya, Kirim Sekarang
+                  </>
+                )}
+              </button>
+            </div>
           </div>
         </div>
       )}
 
-      <header className="bg-slate-800/80 backdrop-blur-md p-4 sticky top-0 z-20 border-b border-slate-700/50 flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-blue-600/20 border border-blue-500/30 flex items-center justify-center text-blue-400 font-bold">
-            <ShieldCheck className="w-6 h-6" />
-          </div>
-          <div>
-            <h1 className="text-base font-bold leading-tight">
-              Presensi E-Sertifikat
-            </h1>
-            <p className="text-xs text-slate-400">KPU Kabupaten Sekadau</p>
-          </div>
+      {kegiatan?.bannerUrl ? (
+        <img
+          src={kegiatan.bannerUrl}
+          alt={kegiatan.namaKegiatan}
+          className="w-full object-cover border-b border-slate-700/60 shadow-lg"
+        />
+      ) : (
+        <div className="w-full h-24 bg-gradient-to-r from-blue-600 to-indigo-600 p-4 flex items-center justify-center text-center">
+          <h2 className="text-sm font-bold text-white">
+            {kegiatan?.namaKegiatan}
+          </h2>
         </div>
-      </header>
+      )}
 
-      <div className="p-4 space-y-3">
-        {kegiatan?.bannerUrl ? (
-          <img
-            src={kegiatan.bannerUrl}
-            alt={kegiatan.namaKegiatan}
-            className="w-full h-36 object-cover rounded-2xl border border-slate-700/60 shadow-lg"
-          />
-        ) : (
-          <div className="w-full h-24 bg-gradient-to-r from-blue-600 to-indigo-600 rounded-2xl p-4 flex items-center justify-center text-center">
-            <h2 className="text-sm font-bold text-white">
-              {kegiatan?.namaKegiatan}
-            </h2>
-          </div>
-        )}
-
+      <div className="space-y-3 px-4 mb-4 mt-8">
         <div className="bg-slate-800/50 border border-slate-700/50 rounded-2xl p-4 space-y-1">
           <span className="text-[10px] font-bold text-blue-400 uppercase tracking-wider flex items-center gap-1">
             <Calendar className="w-3 h-3" /> Formulir Kehadiran
           </span>
+
           <h2 className="text-base font-bold text-white leading-snug">
             {kegiatan?.namaKegiatan}
           </h2>
+
           <p className="text-xs text-slate-400">
             Silakan isi data diri Anda secara benar untuk penerbitan sertifikat.
           </p>
         </div>
       </div>
 
-      <form onSubmit={handleSubmit} className="p-4 pt-0 space-y-4 flex-1 pb-10">
+      <form
+        onSubmit={handleOpenConfirmation}
+        className="p-4 pt-0 space-y-4 flex-1 pb-10"
+      >
         <div className="space-y-1.5">
           <label className="text-xs font-bold text-slate-300 uppercase tracking-wider">
             Nama Lengkap <span className="text-red-400">*</span>
           </label>
+
           <div className="relative">
             <User className="w-4 h-4 text-slate-400 absolute left-3.5 top-3.5" />
+
             <input
               type="text"
               name="nama"
@@ -518,8 +557,10 @@ const FormPresensi = () => {
           <label className="text-xs font-bold text-slate-300 uppercase tracking-wider">
             Alamat Email <span className="text-red-400">*</span>
           </label>
+
           <div className="relative">
             <Mail className="w-4 h-4 text-slate-400 absolute left-3.5 top-3.5" />
+
             <input
               type="email"
               name="email"
@@ -536,17 +577,37 @@ const FormPresensi = () => {
           <label className="text-xs font-bold text-slate-300 uppercase tracking-wider">
             Instansi / Lembaga <span className="text-red-400">*</span>
           </label>
+
           <div className="relative">
-            <Building2 className="w-4 h-4 text-slate-400 absolute left-3.5 top-3.5" />
-            <input
-              type="text"
-              name="instansi"
-              placeholder="Contoh: KPU Kabupaten Sekadau"
-              value={formData.instansi}
-              onChange={handleChange}
-              className="w-full pl-10 pr-4 py-3 bg-slate-800/90 border border-slate-700/80 rounded-xl text-xs text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500/50 transition-all"
-              required
-            />
+            <Building2 className="w-4 h-4 text-slate-400 absolute left-3.5 top-3.5 z-10" />
+
+            {instansiOptions.length > 0 ? (
+              <select
+                name="instansi"
+                value={formData.instansi}
+                onChange={handleChange}
+                className="w-full pl-10 pr-4 py-3 bg-slate-800/90 border border-slate-700/80 rounded-xl text-xs text-white focus:outline-none focus:ring-2 focus:ring-blue-500/50 transition-all"
+                required
+              >
+                <option value="">Pilih Instansi / Lembaga</option>
+
+                {instansiOptions.map((option) => (
+                  <option key={option} value={option}>
+                    {option}
+                  </option>
+                ))}
+              </select>
+            ) : (
+              <input
+                type="text"
+                name="instansi"
+                placeholder="Contoh: KPU Kabupaten Sekadau"
+                value={formData.instansi}
+                onChange={handleChange}
+                className="w-full pl-10 pr-4 py-3 bg-slate-800/90 border border-slate-700/80 rounded-xl text-xs text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500/50 transition-all"
+                required
+              />
+            )}
           </div>
         </div>
 
@@ -554,8 +615,10 @@ const FormPresensi = () => {
           <label className="text-xs font-bold text-slate-300 uppercase tracking-wider">
             Jabatan / Peran <span className="text-red-400">*</span>
           </label>
+
           <div className="relative">
             <Briefcase className="w-4 h-4 text-slate-400 absolute left-3.5 top-3.5" />
+
             <input
               type="text"
               name="jabatan"
@@ -576,7 +639,7 @@ const FormPresensi = () => {
           {isSubmitting ? (
             <>
               <Loader2 className="w-5 h-5 animate-spin" />
-              <span>Mengirim & Menerbitkan Nomor...</span>
+              <span>Menyimpan Presensi...</span>
             </>
           ) : (
             <>

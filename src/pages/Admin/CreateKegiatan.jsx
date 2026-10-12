@@ -1,9 +1,8 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, Plus, X } from "lucide-react";
 import { UploadImage } from "../../services/AxiosInstance";
 
-// Import Firestore SDK
 import {
   doc,
   getDoc,
@@ -11,58 +10,56 @@ import {
   serverTimestamp,
 } from "firebase/firestore";
 
-// Import Sub-Components
 import KegiatanName from "../../components/CreateKegiatan/KegiatanName";
 import SlugURL from "../../components/CreateKegiatan/SlugURL";
 import CertificateNumberFormat from "../../components/CreateKegiatan/CertificateNumberFormat";
 import QRCodePreview from "../../components/CreateKegiatan/QRCodePreview";
 import BannerUpload from "../../components/CreateKegiatan/BannerUpload";
 import TemplateUpload from "../../components/CreateKegiatan/TemplateUpload";
-import PublicFormInfo from "../../components/CreateKegiatan/PublicFormInfo";
 import SubmitButton from "../../components/CreateKegiatan/SubmitButton";
 import { db } from "../../utils/Firebase";
-import { toast, Toaster } from "sonner"; // Impor Toaster untuk pemastian lokal jika belum ada di root
+import { toast } from "sonner";
 
-const MAX_FILE_SIZE = 3 * 1024 * 1024; // 3MB
+const MAX_FILE_SIZE = 3 * 1024 * 1024;
 
 const CreateKegiatan = () => {
   const navigate = useNavigate();
 
-  // State Form Utama
   const [namaKegiatan, setNamaKegiatan] = useState("");
   const [slug, setSlug] = useState("");
- 
-  const [currentYear, setCurrentYear] = useState(
-    new Date().getFullYear().toString(),
-  );
-  // State Nomor Sertifikat & Bank Data
-  const [kodeUndangan, setKodeUndangan] = useState("");
 
+  const [currentYear, setCurrentYear] = useState(
+    new Date().getFullYear().toString()
+  );
+
+  const [kodeUndangan, setKodeUndangan] = useState("");
   const [estimatedNextNum, setEstimatedNextNum] = useState("0001");
   const [loadingCounter, setLoadingCounter] = useState(true);
 
-  // State Banner
   const [bannerFile, setBannerFile] = useState(null);
   const [bannerPreview, setBannerPreview] = useState("");
   const [bannerUrl, setBannerUrl] = useState("");
 
-  // State Template Sertifikat
   const [templateFile, setTemplateFile] = useState(null);
   const [templateUrl, setTemplateUrl] = useState("");
 
-  // Status Loading & Utility
   const [isUploading, setIsUploading] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [copied, setCopied] = useState(false);
 
-  // Form Public Full URL
+  // Dynamic instansi
+  const [instansiOptions, setInstansiOptions] = useState([
+    "KPU Kabupaten Sekadau",
+  ]);
+  const [instansiInput, setInstansiInput] = useState("");
+
   const publicFormUrl = slug
     ? `${window.location.origin}/kegiatan/${slug}`
     : "";
 
-  // 1. CEK BANK DATA NOMOR TERAKHIR
   const fetchBankDataCounter = async () => {
     setLoadingCounter(true);
+
     try {
       const counterDocRef = doc(db, "counters", `sertifikat_${currentYear}`);
       const counterSnap = await getDoc(counterDocRef);
@@ -85,7 +82,6 @@ const CreateKegiatan = () => {
     fetchBankDataCounter();
   }, [currentYear]);
 
-  // Auto Generate Slug
   const handleNamaChange = (e) => {
     const val = e.target.value;
     setNamaKegiatan(val);
@@ -99,7 +95,31 @@ const CreateKegiatan = () => {
     setSlug(generatedSlug);
   };
 
-  // Select Banner
+  const handleAddInstansi = () => {
+    const value = instansiInput.trim();
+
+    if (!value) {
+      toast.info("Masukkan nama instansi terlebih dahulu.");
+      return;
+    }
+
+    const isDuplicate = instansiOptions.some(
+      (item) => item.toLowerCase() === value.toLowerCase()
+    );
+
+    if (isDuplicate) {
+      toast.info("Instansi tersebut sudah ditambahkan.");
+      return;
+    }
+
+    setInstansiOptions((prev) => [...prev, value]);
+    setInstansiInput("");
+  };
+
+  const handleRemoveInstansi = (index) => {
+    setInstansiOptions((prev) => prev.filter((_, i) => i !== index));
+  };
+
   const handleSelectBanner = (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -109,12 +129,12 @@ const CreateKegiatan = () => {
       e.target.value = null;
       return;
     }
+
     setBannerFile(file);
     setBannerPreview(URL.createObjectURL(file));
     setBannerUrl("");
   };
 
-  // Select Template (Pengecekan Validasi Ekstensi & MIME)
   const handleSelectTemplate = (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -122,12 +142,14 @@ const CreateKegiatan = () => {
     const fileName = file.name.toLowerCase();
     const isPptxExtension =
       fileName.endsWith(".pptx") || fileName.endsWith(".ppt");
+
     const validMimeTypes = [
       "application/vnd.openxmlformats-officedocument.presentationml.presentation",
       "application/vnd.ms-powerpoint",
     ];
 
-    const isValidFormat = isPptxExtension || validMimeTypes.includes(file.type);
+    const isValidFormat =
+      isPptxExtension || validMimeTypes.includes(file.type);
 
     if (!isValidFormat) {
       toast.error("Format file template sertifikat harus PPTX atau PPT!");
@@ -145,12 +167,12 @@ const CreateKegiatan = () => {
     setTemplateUrl("");
   };
 
-  // Upload ke Cloud
   const uploadToCloud = async (fileToUpload) => {
     if (!fileToUpload) return null;
 
     try {
       const response = await UploadImage(fileToUpload);
+
       const uploadedUrl =
         response?.file_url ||
         response?.url ||
@@ -158,7 +180,10 @@ const CreateKegiatan = () => {
         response?.data?.file_url ||
         (typeof response === "string" ? response : null);
 
-      if (!uploadedUrl) throw new Error("URL hasil upload tidak ditemukan.");
+      if (!uploadedUrl) {
+        throw new Error("URL hasil upload tidak ditemukan.");
+      }
+
       return uploadedUrl;
     } catch (error) {
       console.error("Upload Error:", error);
@@ -169,6 +194,7 @@ const CreateKegiatan = () => {
 
   const handleCopyLink = () => {
     if (!publicFormUrl) return;
+
     navigator.clipboard.writeText(publicFormUrl);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
@@ -187,7 +213,7 @@ const CreateKegiatan = () => {
       canvas.width = 1000;
       canvas.height = 1000;
       ctx.fillStyle = "#FFFFFF";
-      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.fillRect(0, 0, 1000, 1000);
       ctx.drawImage(img, 0, 0, 1000, 1000);
 
       const pngFile = canvas.toDataURL("image/png");
@@ -202,38 +228,50 @@ const CreateKegiatan = () => {
       btoa(unescape(encodeURIComponent(svgData)));
   };
 
-  // SUBMIT FORM
-// SUBMIT FORM
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!namaKegiatan || !slug)
+
+    if (!namaKegiatan || !slug) {
       return toast.info("Nama Kegiatan & Slug wajib diisi!");
-    if (!kodeUndangan.trim())
+    }
+
+    if (!kodeUndangan.trim()) {
       return toast.info("Format Kode Sertifikat wajib diisi!");
+    }
+
+    if (instansiOptions.length === 0) {
+      return toast.info("Tambahkan minimal satu pilihan Asal Instansi!");
+    }
 
     setIsSubmitting(true);
     setIsUploading(true);
 
     try {
       let finalBannerUrl = bannerUrl;
+
       if (bannerFile && !finalBannerUrl) {
         finalBannerUrl = await uploadToCloud(bannerFile);
+
         if (!finalBannerUrl) {
           setIsSubmitting(false);
           setIsUploading(false);
           return;
         }
+
         setBannerUrl(finalBannerUrl);
       }
 
       let finalTemplateUrl = templateUrl;
+
       if (templateFile && !finalTemplateUrl) {
         finalTemplateUrl = await uploadToCloud(templateFile);
+
         if (!finalTemplateUrl) {
           setIsSubmitting(false);
           setIsUploading(false);
           return;
         }
+
         setTemplateUrl(finalTemplateUrl);
       }
 
@@ -253,10 +291,11 @@ const CreateKegiatan = () => {
 
         const inputNum = parseInt(estimatedNextNum, 10);
 
-        // VALIDASI: Jika nomor urut yang diinput admin lebih kecil atau sama dengan counter terakhir yang sudah terpakai
         if (isNaN(inputNum) || inputNum <= currentLast) {
           throw new Error(
-            `Nomor urut "${estimatedNextNum}" sudah terpakai atau tidak valid! Nomor urut terakhir saat ini adalah ${String(currentLast).padStart(4, "0")}. Gunakan nomor setelahnya.`
+            `Nomor urut "${estimatedNextNum}" sudah terpakai atau tidak valid! Nomor urut terakhir saat ini adalah ${String(
+              currentLast
+            ).padStart(4, "0")}. Gunakan nomor setelahnya.`
           );
         }
 
@@ -269,7 +308,7 @@ const CreateKegiatan = () => {
             lastNumber: nextNumVal,
             updatedAt: serverTimestamp(),
           },
-          { merge: true },
+          { merge: true }
         );
 
         transaction.set(kegiatanDocRef, {
@@ -279,7 +318,35 @@ const CreateKegiatan = () => {
           startingNumber: finalAssignedNumber,
           bannerUrl: finalBannerUrl || "",
           templateUrl: finalTemplateUrl || "",
-          formFields: ["nama", "email", "instansi", "jabatan"],
+          formConfig: {
+            fields: [
+              {
+                key: "nama",
+                label: "Nama Lengkap",
+                type: "text",
+                required: true,
+              },
+              {
+                key: "email",
+                label: "Email",
+                type: "email",
+                required: true,
+              },
+              {
+                key: "instansi",
+                label: "Asal Instansi",
+                type: "select",
+                required: true,
+                options: instansiOptions,
+              },
+              {
+                key: "jabatan",
+                label: "Jabatan",
+                type: "text",
+                required: false,
+              },
+            ],
+          },
           totalPeserta: 0,
           terkirim: 0,
           aktif: true,
@@ -300,7 +367,6 @@ const CreateKegiatan = () => {
 
   return (
     <div className="min-h-screen bg-slate-900 text-slate-100 flex flex-col mx-auto shadow-2xl border-x border-slate-800 relative">
-      {/* Menambahkan Toaster untuk menjamin Toast Sonner muncul */}
       
 
       <header className="bg-slate-800/80 backdrop-blur-md p-4 sticky top-0 z-20 border-b border-slate-700/50 flex items-center gap-3">
@@ -310,6 +376,7 @@ const CreateKegiatan = () => {
         >
           <ArrowLeft className="w-5 h-5" />
         </button>
+
         <div>
           <h1 className="text-base font-bold leading-tight">
             Buat Kegiatan Baru
@@ -357,13 +424,73 @@ const CreateKegiatan = () => {
           onSelectBanner={handleSelectBanner}
         />
 
-        {/* PERBAIKAN: Menyamakan nama prop 'onSelectTemplate' */}
         <TemplateUpload
           templateFile={templateFile}
           onSelectTemplate={handleSelectTemplate}
         />
 
-        <PublicFormInfo />
+        {/* Dynamic Instansi */}
+        <div className="bg-slate-800/60 border border-slate-700 rounded-xl p-4 space-y-3">
+          <div>
+            <label className="block text-sm font-semibold mb-2">
+              Daftar Asal Instansi
+            </label>
+
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={instansiInput}
+                onChange={(e) => setInstansiInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    handleAddInstansi();
+                  }
+                }}
+                placeholder="Contoh: Dinas Pendidikan"
+                className="flex-1 bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2  focus:ring-blue-500 focus:border-blue-500 transition-all"
+              />
+
+              <button
+                type="button"
+                onClick={handleAddInstansi}
+                className="inline-flex items-center gap-1 px-4 py-2 bg-blue-700 hover:bg-blue-800 rounded-lg text-sm font-semibold transition-colors"
+              >
+                <Plus className="w-4 h-4" />
+                Tambah
+              </button>
+            </div>
+          </div>
+
+          {instansiOptions.length === 0 ? (
+            <p className="text-xs text-slate-400">
+              Belum ada pilihan instansi.
+            </p>
+          ) : (
+            <div className="flex flex-wrap gap-2">
+              {instansiOptions.map((item, index) => (
+                <span
+                  key={`${item}-${index}`}
+                  className="inline-flex items-center gap-2 bg-slate-900 border border-slate-700 px-3 py-1 rounded-full text-xs"
+                >
+                  {item}
+
+                  <button
+                    type="button"
+                    onClick={() => handleRemoveInstansi(index)}
+                    className="text-red-400 hover:text-red-300"
+                  >
+                    <X className="w-3 h-3" />
+                  </button>
+                </span>
+              ))}
+            </div>
+          )}
+
+          <p className="text-xs text-slate-400">
+            Pilihan ini akan muncul sebagai dropdown pada form presensi peserta.
+          </p>
+        </div>
 
         <SubmitButton
           isSubmitting={isSubmitting}
