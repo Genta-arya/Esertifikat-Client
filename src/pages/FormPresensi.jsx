@@ -752,7 +752,7 @@ if (loadingKegiatan) {
             </div>
             <div>
               <span className="text-[10px] font-bold text-red-700 uppercase tracking-[0.13em]">
-                Kegiatan KPU Kabupaten Sekadau
+               KPU Kabupaten Sekadau
               </span>
               <h1 className="text-base font-bold text-slate-900 leading-snug mt-1">
                 {kegiatan?.namaKegiatan}
@@ -799,7 +799,7 @@ if (loadingKegiatan) {
             className="mx-4 mt-4 bg-white border border-stone-200 rounded-xl p-5 shadow-sm space-y-5"
           >
             <div className="flex items-center gap-2 pb-3 border-b border-stone-200">
-              <span className="w-6 h-6 rounded-full bg-red-700 text-white text-[11px] font-bold flex items-center justify-center">
+              <span className="w-6 h-6 rounded-full animate-pulse bg-red-700 text-white text-[11px] font-bold flex items-center justify-center">
                 1
               </span>
               <div>
