@@ -10,9 +10,9 @@ import {
   AlertCircle,
   Loader2,
   Calendar,
-
   MailCheck,
   ShieldAlert,
+  PencilLine,
 } from "lucide-react";
 
 import {
@@ -28,9 +28,13 @@ import {
 import { db } from "../utils/Firebase";
 import { Toaster, toast } from "sonner";
 
+const OTHER_INSTITUTION_VALUE = "__LAINNYA__";
+const OTHER_INSTITUTION_LABEL = "Lainnya";
+
 const FormPresensi = () => {
   const { slug } = useParams();
   const [searchParams, setSearchParams] = useSearchParams();
+
   const emailParam = searchParams.get("email")?.trim().toLowerCase();
 
   const [kegiatan, setKegiatan] = useState(null);
@@ -44,12 +48,17 @@ const FormPresensi = () => {
     jabatan: "",
   });
 
+  // Menyimpan pilihan dropdown instansi.
+  // Bisa berupa nama instansi atau OTHER_INSTITUTION_VALUE.
+  const [selectedInstansi, setSelectedInstansi] = useState("");
+
+  // Hanya dipakai jika peserta memilih "Lainnya".
+  const [instansiLainnya, setInstansiLainnya] = useState("");
+
   const [instansiOptions, setInstansiOptions] = useState([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
   const [generatedNomor, setGeneratedNomor] = useState("");
-
-  // Modal konfirmasi sebelum submit
   const [showConfirmModal, setShowConfirmModal] = useState(false);
 
   const currentYear = new Date().getFullYear();
@@ -64,7 +73,7 @@ const FormPresensi = () => {
 
       try {
         const docRef = doc(db, "kegiatan", slug);
-        let docSnap = await getDoc(docRef);
+        const docSnap = await getDoc(docRef);
 
         let data = null;
         let docId = slug;
@@ -72,12 +81,12 @@ const FormPresensi = () => {
         if (docSnap.exists()) {
           data = docSnap.data();
         } else {
-          const q = query(
+          const kegiatanQuery = query(
             collection(db, "kegiatan"),
             where("slug", "==", slug)
           );
 
-          const querySnap = await getDocs(q);
+          const querySnap = await getDocs(kegiatanQuery);
 
           if (!querySnap.empty) {
             const matchedDoc = querySnap.docs[0];
@@ -96,17 +105,37 @@ const FormPresensi = () => {
           return;
         }
 
-        setKegiatan({ id: docId, ...data });
+        setKegiatan({
+          id: docId,
+          ...data,
+        });
 
         const formFields = data?.formConfig?.fields || [];
+
         const instansiField = formFields.find(
           (field) => field.key === "instansi"
         );
 
-        setInstansiOptions(instansiField?.options || []);
+        const configuredOptions = Array.isArray(instansiField?.options)
+          ? instansiField.options
+              .map((option) => String(option).trim())
+              .filter(Boolean)
+              .filter(
+                (option) =>
+                  option.toLowerCase() !== OTHER_INSTITUTION_LABEL.toLowerCase()
+              )
+          : [];
+
+        setInstansiOptions(configuredOptions);
 
         if (emailParam) {
-          const pesertaRef = collection(db, "kegiatan", docId, "peserta");
+          const pesertaRef = collection(
+            db,
+            "kegiatan",
+            docId,
+            "peserta"
+          );
+
           const qEmail = query(
             pesertaRef,
             where("email", "==", emailParam)
@@ -117,12 +146,28 @@ const FormPresensi = () => {
           if (!pesertaSnap.empty) {
             const pesertaData = pesertaSnap.docs[0].data();
 
+            const savedInstansi = pesertaData.instansi || "";
+
             setFormData({
               nama: pesertaData.nama || "",
               email: pesertaData.email || emailParam,
-              instansi: pesertaData.instansi || "",
+              instansi: savedInstansi,
               jabatan: pesertaData.jabatan || "",
             });
+
+            // Bila data instansi lama tidak ada dalam daftar admin,
+            // tampilkan sebagai Lainnya + input manual.
+            if (
+              configuredOptions.length > 0 &&
+              savedInstansi &&
+              !configuredOptions.includes(savedInstansi)
+            ) {
+              setSelectedInstansi(OTHER_INSTITUTION_VALUE);
+              setInstansiLainnya(savedInstansi);
+            } else {
+              setSelectedInstansi(savedInstansi);
+              setInstansiLainnya("");
+            }
 
             setGeneratedNomor(pesertaData.nomorSertifikat || "");
             setIsSuccess(true);
@@ -132,6 +177,7 @@ const FormPresensi = () => {
             );
 
             setSearchParams({});
+
             setFormData((prev) => ({
               ...prev,
               email: "",
@@ -149,12 +195,47 @@ const FormPresensi = () => {
     fetchKegiatanAndCheckEmail();
   }, [slug, emailParam, setSearchParams]);
 
-  const handleChange = (e) => {
-    const { name, value } = e.target;
+  const handleChange = (event) => {
+    const { name, value } = event.target;
 
     setFormData((prev) => ({
       ...prev,
       [name]: value,
+    }));
+  };
+
+  const handleInstansiChange = (event) => {
+    const value = event.target.value;
+
+    setSelectedInstansi(value);
+
+    if (value === OTHER_INSTITUTION_VALUE) {
+      setFormData((prev) => ({
+        ...prev,
+        instansi: "",
+      }));
+
+      setInstansiLainnya("");
+      return;
+    }
+
+    setInstansiLainnya("");
+
+    setFormData((prev) => ({
+      ...prev,
+      instansi: value,
+    }));
+  };
+
+  const handleInstansiLainnyaChange = (event) => {
+    const value = event.target.value;
+
+    setInstansiLainnya(value);
+
+    // Nilai manual langsung menjadi nilai instansi final pada formData.
+    setFormData((prev) => ({
+      ...prev,
+      instansi: value,
     }));
   };
 
@@ -181,6 +262,15 @@ const FormPresensi = () => {
       return false;
     }
 
+    if (selectedInstansi === OTHER_INSTITUTION_VALUE) {
+      if (!instansiLainnya.trim()) {
+        toast.error("Silakan tulis nama instansi atau lembaga Anda.");
+        return false;
+      }
+
+      return true;
+    }
+
     if (
       instansiOptions.length > 0 &&
       !instansiOptions.includes(instansiClean)
@@ -192,10 +282,12 @@ const FormPresensi = () => {
     return true;
   };
 
-  const handleOpenConfirmation = (e) => {
-    e.preventDefault();
+  const handleOpenConfirmation = (event) => {
+    event.preventDefault();
 
-    if (!validateForm()) return;
+    if (!validateForm()) {
+      return;
+    }
 
     setShowConfirmModal(true);
   };
@@ -211,36 +303,48 @@ const FormPresensi = () => {
 
     try {
       const targetDocId = kegiatan.id;
-      const pesertaRef = collection(db, "kegiatan", targetDocId, "peserta");
 
-      const checkEmailQuery = query(
-        pesertaRef,
-        where("email", "==", emailClean)
+      const pesertaRef = collection(
+        db,
+        "kegiatan",
+        targetDocId,
+        "peserta"
       );
 
-      const existingPeserta = await getDocs(checkEmailQuery);
-
       let finalNomorResmi = "";
+
       const kodeUndangan = kegiatan?.kodeUndangan || "KPU-SKD";
-      const counterDocRef = doc(db, "counters", `sertifikat_${currentYear}`);
+
+      const counterDocRef = doc(
+        db,
+        "counters",
+        `sertifikat_${currentYear}`
+      );
+
       const newPesertaDocRef = doc(pesertaRef);
+
       const kegiatanRef = doc(db, "kegiatan", targetDocId);
 
       await runTransaction(db, async (transaction) => {
         const counterSnap = await transaction.get(counterDocRef);
         const kegiatanSnap = await transaction.get(kegiatanRef);
 
-        let currentLast = 0;
-
-        if (counterSnap.exists()) {
-          currentLast = counterSnap.data().lastNumber || 0;
+        if (!kegiatanSnap.exists()) {
+          throw new Error("Dokumen kegiatan tidak ditemukan.");
         }
+
+        const currentLast = counterSnap.exists()
+          ? counterSnap.data().lastNumber || 0
+          : 0;
 
         const nextNum = currentLast + 1;
         const formattedNum = String(nextNum).padStart(4, "0");
-        finalNomorResmi = `${formattedNum}/${kodeUndangan}/${currentYear}`;
 
-        const currentTotal = kegiatanSnap.data()?.totalPeserta || 0;
+        finalNomorResmi =
+          `${formattedNum}/${kodeUndangan}/${currentYear}`;
+
+        const currentTotal =
+          kegiatanSnap.data()?.totalPeserta || 0;
 
         transaction.set(
           counterDocRef,
@@ -254,7 +358,16 @@ const FormPresensi = () => {
         transaction.set(newPesertaDocRef, {
           nama: namaClean,
           email: emailClean,
+
+          // Ini selalu menyimpan nama instansi final.
+          // Jika pilih Lainnya, yang tersimpan adalah hasil input manual.
           instansi: instansiClean,
+
+          // Berguna untuk laporan/admin:
+          // true apabila peserta mengisi instansi manual.
+          instansiManual:
+            selectedInstansi === OTHER_INSTITUTION_VALUE,
+
           jabatan: jabatanClean,
           nomorSertifikat: finalNomorResmi,
           sertifikatTerkirim: false,
@@ -267,7 +380,10 @@ const FormPresensi = () => {
         });
       });
 
-      const newUrl = `${window.location.pathname}?email=${emailClean}`;
+      const newUrl = `${window.location.pathname}?email=${encodeURIComponent(
+        emailClean
+      )}`;
+
       window.history.replaceState(null, "", newUrl);
 
       setGeneratedNomor(finalNomorResmi);
@@ -278,8 +394,10 @@ const FormPresensi = () => {
       );
     } catch (error) {
       console.error("Gagal menyimpan presensi:", error);
+
       toast.error(
-        "Terjadi kesalahan saat menyimpan presensi. Silakan coba lagi."
+        error.message ||
+          "Terjadi kesalahan saat menyimpan presensi. Silakan coba lagi."
       );
     } finally {
       setIsSubmitting(false);
@@ -291,7 +409,9 @@ const FormPresensi = () => {
       <div className="min-h-screen bg-slate-900 text-slate-100 flex items-center justify-center p-4">
         <div className="flex flex-col items-center gap-3">
           <Loader2 className="w-8 h-8 text-blue-500 animate-spin" />
-          <p className="text-sm text-slate-400">Memuat form presensi...</p>
+          <p className="text-sm text-slate-400">
+            Memuat form presensi...
+          </p>
         </div>
       </div>
     );
@@ -311,7 +431,10 @@ const FormPresensi = () => {
             <h2 className="text-base font-bold text-white">
               Presensi Tidak Tersedia
             </h2>
-            <p className="text-xs text-slate-400 mt-1">{kegiatanError}</p>
+
+            <p className="text-xs text-slate-400 mt-1">
+              {kegiatanError}
+            </p>
           </div>
         </div>
       </div>
@@ -343,23 +466,23 @@ const FormPresensi = () => {
           </div>
 
           <div className="bg-slate-900/60 rounded-2xl p-4 text-xs text-slate-400 space-y-2 text-left border border-slate-800">
-            <p className="flex justify-between">
+            <p className="flex justify-between gap-3">
               <span>Kegiatan:</span>
               <span className="font-semibold text-slate-200 text-right">
                 {kegiatan?.namaKegiatan}
               </span>
             </p>
 
-            <p className="flex justify-between">
+            <p className="flex justify-between gap-3">
               <span>Nomor Sertifikat:</span>
-              <span className="font-mono text-blue-400 font-bold">
+              <span className="font-mono text-blue-400 font-bold text-right">
                 {generatedNomor}
               </span>
             </p>
 
-            <p className="flex justify-between">
+            <p className="flex justify-between gap-3">
               <span>Email:</span>
-              <span className="font-mono text-slate-200">
+              <span className="font-mono text-slate-200 text-right break-all">
                 {formData.email}
               </span>
             </p>
@@ -404,8 +527,8 @@ const FormPresensi = () => {
 
   return (
     <div className="min-h-screen bg-slate-900 text-slate-100 flex flex-col mx-auto shadow-2xl border-x border-slate-800 relative">
-      
-      {/* Modal Konfirmasi */}
+      <Toaster position="top-center" richColors />
+
       {showConfirmModal && (
         <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="bg-slate-800 border border-slate-700 rounded-2xl w-full max-w-sm shadow-2xl overflow-hidden">
@@ -430,7 +553,7 @@ const FormPresensi = () => {
               <div className="bg-slate-900/70 border border-slate-700 rounded-xl p-4 space-y-2 text-xs">
                 <div className="flex justify-between gap-3">
                   <span className="text-slate-400">Nama</span>
-                  <span className="font-semibold text-white text-right">
+                  <span className="font-semibold text-white text-right break-words">
                     {formData.nama}
                   </span>
                 </div>
@@ -444,14 +567,14 @@ const FormPresensi = () => {
 
                 <div className="flex justify-between gap-3">
                   <span className="text-slate-400">Instansi</span>
-                  <span className="font-semibold text-white text-right">
+                  <span className="font-semibold text-white text-right break-words">
                     {formData.instansi}
                   </span>
                 </div>
 
                 <div className="flex justify-between gap-3">
                   <span className="text-slate-400">Jabatan</span>
-                  <span className="font-semibold text-white text-right">
+                  <span className="font-semibold text-white text-right break-words">
                     {formData.jabatan}
                   </span>
                 </div>
@@ -459,9 +582,8 @@ const FormPresensi = () => {
 
               <p className="text-[11px] text-slate-400 leading-relaxed">
                 Pastikan <span className="text-white font-semibold">nama</span>{" "}
-                dan{" "}
-                <span className="text-white font-semibold">email</span> sudah
-                benar. E-Sertifikat akan dikirim ke email tersebut.
+                dan <span className="text-white font-semibold">email</span>{" "}
+                sudah benar. E-Sertifikat akan dikirim ke email tersebut.
               </p>
             </div>
 
@@ -515,7 +637,8 @@ const FormPresensi = () => {
       <div className="space-y-3 px-4 mb-4 mt-8">
         <div className="bg-slate-800/50 border border-slate-700/50 rounded-2xl p-4 space-y-1">
           <span className="text-[10px] font-bold text-blue-400 uppercase tracking-wider flex items-center gap-1">
-            <Calendar className="w-3 h-3" /> Formulir Kehadiran
+            <Calendar className="w-3 h-3" />
+            Formulir Kehadiran
           </span>
 
           <h2 className="text-base font-bold text-white leading-snug">
@@ -584,8 +707,8 @@ const FormPresensi = () => {
             {instansiOptions.length > 0 ? (
               <select
                 name="instansi"
-                value={formData.instansi}
-                onChange={handleChange}
+                value={selectedInstansi}
+                onChange={handleInstansiChange}
                 className="w-full pl-10 pr-4 py-3 bg-slate-800/90 border border-slate-700/80 rounded-xl text-xs text-white focus:outline-none focus:ring-2 focus:ring-blue-500/50 transition-all"
                 required
               >
@@ -596,6 +719,10 @@ const FormPresensi = () => {
                     {option}
                   </option>
                 ))}
+
+                <option value={OTHER_INSTITUTION_VALUE}>
+                  {OTHER_INSTITUTION_LABEL}
+                </option>
               </select>
             ) : (
               <input
@@ -609,6 +736,32 @@ const FormPresensi = () => {
               />
             )}
           </div>
+
+          {instansiOptions.length > 0 &&
+            selectedInstansi === OTHER_INSTITUTION_VALUE && (
+              <div className="relative pt-1">
+                <PencilLine className="w-4 h-4 text-blue-400 absolute left-3.5 top-4" />
+
+                <input
+                  type="text"
+                  name="instansiLainnya"
+                  value={instansiLainnya}
+                  onChange={handleInstansiLainnyaChange}
+                  maxLength={120}
+                  placeholder="Tulis nama instansi / lembaga Anda"
+                  className="w-full pl-10 pr-4 py-3 bg-slate-800/90 border border-blue-500/50 rounded-xl text-xs text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500/50 transition-all"
+                  required
+                  autoFocus
+                />
+              </div>
+            )}
+
+          {instansiOptions.length > 0 && (
+            <p className="text-[10px] text-slate-500">
+              Jika instansi Anda tidak tersedia, pilih{" "}
+              <span className="text-slate-300 font-semibold">Lainnya</span>.
+            </p>
+          )}
         </div>
 
         <div className="space-y-1.5">
