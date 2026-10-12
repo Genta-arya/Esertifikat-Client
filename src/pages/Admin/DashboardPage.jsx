@@ -23,8 +23,10 @@ import {
   AlertCircle,
   Mail,
   RefreshCw,
+  Download,
 } from "lucide-react";
 import { QRCodeSVG } from "qrcode.react";
+import * as XLSX from "xlsx";
 
 import {
   collection,
@@ -33,6 +35,7 @@ import {
   deleteDoc,
   updateDoc,
   increment,
+  getDocs,
 } from "firebase/firestore";
 import { db, auth } from "../../utils/Firebase";
 import { toast } from "sonner";
@@ -41,7 +44,6 @@ import ImportCsvModal from "./ImportCsvModal";
 const KPU_LOGO_URL =
   "https://upload.wikimedia.org/wikipedia/commons/thumb/4/46/KPU_Logo.svg/1920px-KPU_Logo.svg.png";
 
-// Ganti jika endpoint backend kamu berubah.
 const BACKEND_API_URL = "https://esertifikat.apiservices.my.id";
 
 const CERTIFICATE_STATUS = {
@@ -85,6 +87,43 @@ const getCertificateStatus = (peserta) => {
   return peserta?.sertifikatTerkirim ? "COMPLETED" : "QUEUED";
 };
 
+const getCertificateStatusLabel = (peserta) => {
+  const status = getCertificateStatus(peserta);
+
+  return CERTIFICATE_STATUS[status]?.label || "Tidak Diketahui";
+};
+
+const formatFirestoreDate = (value) => {
+  if (!value) return "-";
+
+  try {
+    const date = value?.toDate ? value.toDate() : new Date(value);
+
+    if (Number.isNaN(date.getTime())) {
+      return "-";
+    }
+
+    return date.toLocaleString("id-ID", {
+      day: "2-digit",
+      month: "2-digit",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  } catch {
+    return "-";
+  }
+};
+
+const sanitizeFileName = (value = "rekap_peserta") => {
+  return String(value)
+    .trim()
+    .replace(/[\\/:*?"<>|]/g, "-")
+    .replace(/\s+/g, "_")
+    .replace(/_+/g, "_")
+    .substring(0, 100);
+};
+
 const CertificateStatusBadge = ({ peserta }) => {
   const status = getCertificateStatus(peserta);
 
@@ -123,8 +162,10 @@ const DashboardPage = ({ user }) => {
   const [pesertaList, setPesertaList] = useState([]);
   const [loadingPeserta, setLoadingPeserta] = useState(false);
 
-  // Menyimpan ID peserta yang sedang dikirim ulang.
   const [retryingPesertaId, setRetryingPesertaId] = useState(null);
+
+  // ID kegiatan yang sedang diproses menjadi file Excel.
+  const [exportingKegiatanId, setExportingKegiatanId] = useState(null);
 
   useEffect(() => {
     const unsubscribe = onSnapshot(
@@ -357,7 +398,6 @@ const DashboardPage = ({ user }) => {
 
   const handleNavigateToForm = (item) => {
     const slugOrId = item.slug || item.id;
-
     navigate(`/kegiatan/${slugOrId}`);
   };
 
@@ -398,6 +438,218 @@ const DashboardPage = ({ user }) => {
     image.src =
       "data:image/svg+xml;base64," +
       btoa(unescape(encodeURIComponent(svgData)));
+  };
+
+  // ==========================================
+  // EXPORT EXCEL REKAP PESERTA
+  // ==========================================
+  const handleExportExcel = async (event, kegiatan) => {
+    event.stopPropagation();
+
+    if (exportingKegiatanId) {
+      return;
+    }
+
+    setExportingKegiatanId(kegiatan.id);
+
+    const loadingToastId = toast.loading(
+      "Menyiapkan file Excel rekap peserta..."
+    );
+
+    try {
+      const pesertaRef = collection(
+        db,
+        "kegiatan",
+        kegiatan.id,
+        "peserta"
+      );
+
+      const pesertaSnapshot = await getDocs(pesertaRef);
+
+      const pesertaData = pesertaSnapshot.docs
+        .map((item) => ({
+          id: item.id,
+          ...item.data(),
+        }))
+        .sort((a, b) => {
+          const certA = String(a.nomorSertifikat || "");
+          const certB = String(b.nomorSertifikat || "");
+
+          return certA.localeCompare(certB, undefined, {
+            numeric: true,
+            sensitivity: "base",
+          });
+        });
+
+      if (pesertaData.length === 0) {
+        toast.dismiss(loadingToastId);
+        toast.error("Belum ada peserta untuk diexport.");
+        return;
+      }
+
+      const namaKegiatan =
+        kegiatan.namaKegiatan || kegiatan.nama || "Kegiatan";
+
+      const rows = pesertaData.map((peserta, index) => ({
+        No: index + 1,
+        "Nomor Sertifikat": peserta.nomorSertifikat || "-",
+        "Nama Lengkap": peserta.nama || "-",
+        Email: peserta.email || "-",
+        "Instansi / Lembaga": peserta.instansi || "-",
+        "Instansi Manual": peserta.instansiManual ? "Ya" : "Tidak",
+        "Jabatan / Peran": peserta.jabatan || "-",
+        "Status Sertifikat": getCertificateStatusLabel(peserta),
+        "Status Kode": getCertificateStatus(peserta),
+        "Sertifikat Terkirim": peserta.sertifikatTerkirim ? "Ya" : "Belum",
+        "Waktu Presensi": formatFirestoreDate(
+          peserta.waktuPresensi
+        ),
+        "Waktu Diproses": formatFirestoreDate(
+          peserta.certificateProcessedAt
+        ),
+        "Jumlah Percobaan Kirim": peserta.certificateAttempts || 0,
+        "Pesan Error": peserta.certificateError || "-",
+        "URL Arsip Google Drive":
+          peserta.certificateDriveUrl || "-",
+      }));
+
+      const totalPeserta = pesertaData.length;
+
+      const totalCompleted = pesertaData.filter(
+        (peserta) => getCertificateStatus(peserta) === "COMPLETED"
+      ).length;
+
+      const totalFailed = pesertaData.filter(
+        (peserta) => getCertificateStatus(peserta) === "FAILED"
+      ).length;
+
+      const totalQueued = pesertaData.filter(
+        (peserta) => getCertificateStatus(peserta) === "QUEUED"
+      ).length;
+
+      const totalProcessing = pesertaData.filter(
+        (peserta) => getCertificateStatus(peserta) === "PROCESSING"
+      ).length;
+
+      const totalRetryWait = pesertaData.filter(
+        (peserta) => getCertificateStatus(peserta) === "RETRY_WAIT"
+      ).length;
+
+      const ringkasanRows = [
+        {
+          Keterangan: "Nama Kegiatan",
+          Nilai: namaKegiatan,
+        },
+        {
+          Keterangan: "Penyelenggara",
+          Nilai:
+            kegiatan.penyelenggara || "KPU Kabupaten Sekadau",
+        },
+        {
+          Keterangan: "Kode Undangan",
+          Nilai: kegiatan.kodeUndangan || "-",
+        },
+        {
+          Keterangan: "Tanggal Export",
+          Nilai: new Date().toLocaleString("id-ID"),
+        },
+        {
+          Keterangan: "Total Peserta",
+          Nilai: totalPeserta,
+        },
+        {
+          Keterangan: "Sertifikat Terkirim",
+          Nilai: totalCompleted,
+        },
+        {
+          Keterangan: "Menunggu Antrean",
+          Nilai: totalQueued,
+        },
+        {
+          Keterangan: "Sedang Diproses",
+          Nilai: totalProcessing,
+        },
+        {
+          Keterangan: "Menunggu Retry Otomatis",
+          Nilai: totalRetryWait,
+        },
+        {
+          Keterangan: "Gagal Dikirim",
+          Nilai: totalFailed,
+        },
+      ];
+
+      const workbook = XLSX.utils.book_new();
+
+      const pesertaWorksheet = XLSX.utils.json_to_sheet(rows);
+      const ringkasanWorksheet = XLSX.utils.json_to_sheet(
+        ringkasanRows
+      );
+
+      pesertaWorksheet["!cols"] = [
+        { wch: 6 },
+        { wch: 27 },
+        { wch: 30 },
+        { wch: 32 },
+        { wch: 30 },
+        { wch: 16 },
+        { wch: 24 },
+        { wch: 20 },
+        { wch: 16 },
+        { wch: 20 },
+        { wch: 21 },
+        { wch: 21 },
+        { wch: 22 },
+        { wch: 55 },
+        { wch: 55 },
+      ];
+
+      ringkasanWorksheet["!cols"] = [
+        { wch: 30 },
+        { wch: 45 },
+      ];
+
+      XLSX.utils.book_append_sheet(
+        workbook,
+        pesertaWorksheet,
+        "Rekap Peserta"
+      );
+
+      XLSX.utils.book_append_sheet(
+        workbook,
+        ringkasanWorksheet,
+        "Ringkasan"
+      );
+
+      const safeNamaKegiatan = sanitizeFileName(namaKegiatan);
+
+      const tanggalExport = new Date()
+        .toLocaleDateString("id-ID")
+        .replace(/\//g, "-");
+
+      const fileName =
+        `Rekap_Peserta_${safeNamaKegiatan}_${tanggalExport}.xlsx`;
+
+      XLSX.writeFile(workbook, fileName, {
+        compression: true,
+      });
+
+      toast.dismiss(loadingToastId);
+
+      toast.success(
+        `${totalPeserta} data peserta berhasil diexport ke Excel.`
+      );
+    } catch (error) {
+      console.error("Gagal export Excel:", error);
+
+      toast.dismiss(loadingToastId);
+
+      toast.error(
+        error.message || "Gagal membuat file Excel."
+      );
+    } finally {
+      setExportingKegiatanId(null);
+    }
   };
 
   // ==========================================
@@ -459,17 +711,16 @@ const DashboardPage = ({ user }) => {
       }
 
       toast.success(
-        `Sertifikat ${peserta.nama || "peserta"} dimasukkan kembali ke antrean.`
+        `Sertifikat ${
+          peserta.nama || "peserta"
+        } dimasukkan kembali ke antrean.`
       );
-
-      // Tidak perlu update Firestore dari frontend.
-      // Backend sudah mengubah certificateStatus menjadi QUEUED.
-      // onSnapshot akan otomatis mengubah UI dashboard.
     } catch (error) {
       console.error("Gagal kirim ulang sertifikat:", error);
 
       toast.error(
-        error.message || "Gagal memasukkan peserta ke antrean ulang."
+        error.message ||
+          "Gagal memasukkan peserta ke antrean ulang."
       );
     } finally {
       setRetryingPesertaId(null);
@@ -575,6 +826,8 @@ const DashboardPage = ({ user }) => {
                 : item.tanggal || "Terbaru";
 
               const isExpanded = expandedKegiatanId === item.id;
+              const isExporting =
+                exportingKegiatanId === item.id;
 
               return (
                 <div
@@ -642,7 +895,7 @@ const DashboardPage = ({ user }) => {
                       </p>
                     </div>
 
-                    <div className="flex items-center gap-1">
+                    <div className="flex items-center gap-1 flex-wrap justify-end">
                       <button
                         type="button"
                         onClick={(event) =>
@@ -652,6 +905,23 @@ const DashboardPage = ({ user }) => {
                         title="Unduh QR Code Form"
                       >
                         <QrCode className="w-4 h-4" />
+                      </button>
+
+                      {/* EXPORT EXCEL */}
+                      <button
+                        type="button"
+                        onClick={(event) =>
+                          handleExportExcel(event, item)
+                        }
+                        disabled={Boolean(exportingKegiatanId)}
+                        className="p-1.5 bg-emerald-600/10 hover:bg-emerald-600/20 text-emerald-400 border border-emerald-500/20 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                        title="Export Rekap Peserta ke Excel"
+                      >
+                        {isExporting ? (
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                        ) : (
+                          <Download className="w-4 h-4" />
+                        )}
                       </button>
 
                       <button

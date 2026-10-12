@@ -520,7 +520,7 @@ const FormPresensi = () => {
 
   return (
     <div className="min-h-screen bg-stone-100 text-slate-800">
-      <Toaster position="top-center" richColors />
+
 
       {showConfirmModal && (
         <div className="fixed inset-0 z-50 bg-slate-950/45 backdrop-blur-sm flex items-center justify-center p-4">
