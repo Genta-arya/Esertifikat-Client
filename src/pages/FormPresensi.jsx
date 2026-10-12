@@ -526,12 +526,36 @@ const handleSearchCertificate = async (event) => {
     setActiveTab(tab);
   };
 
-  if (loadingKegiatan) {
+if (loadingKegiatan) {
     return (
       <div className="min-h-screen bg-stone-100 text-slate-800 flex items-center justify-center p-4">
-        <div className="bg-white border border-stone-200 shadow-sm rounded-2xl p-6 flex flex-col items-center gap-3">
-          <Loader2 className="w-8 h-8 text-red-700 animate-spin" />
-          <p className="text-sm text-slate-600">Memuat formulir kegiatan...</p>
+        <div className="bg-white border border-stone-200 shadow-xl rounded-2xl p-8 flex flex-col items-center gap-4 max-w-xs w-full text-center">
+          <div className="relative flex items-center justify-center">
+            {/* Lingkaran efek pulse / berdenyut di belakang logo */}
+            <div className="absolute w-16 h-16 bg-red-100 rounded-full animate-ping opacity-75"></div>
+            
+            {/* Logo KPU */}
+            <img
+              src="https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcQWP7A6s61nirGfyz19bMeseHVKbYY5HIGKkQh0ah3rGA&s"
+              alt="Logo KPU"
+              className="w-12 h-12 object-contain relative z-10"
+            />
+          </div>
+
+          <div className="space-y-1">
+            <h2 className="text-sm font-bold text-slate-900 tracking-wide">
+              KPU KABUPATEN SEKADAU
+            </h2>
+            <p className="text-xs text-slate-500 animate-pulse">
+              Memuat formulir kegiatan...
+            </p>
+          </div>
+
+          {/* Indikator loading tambahan */}
+          <div className="flex items-center gap-1.5 pt-1">
+            <Loader2 className="w-4 h-4 text-red-700 animate-spin" />
+            <span className="text-[11px] font-medium text-slate-400">Mohon tunggu sebentar</span>
+          </div>
         </div>
       </div>
     );
