@@ -92,7 +92,7 @@ const LoginPage = () => {
             Selamat Datang Kembali
           </h2>
           <p className="text-slate-400 text-sm mt-1">
-            Masuk ke Sistem E-Sertifikat KPU Kabupaten Sekadau[cite: 1]
+            Masuk ke Sistem E-Sertifikat KPU Kabupaten Sekadau
           </p>
         </div>
 
@@ -194,7 +194,7 @@ const LoginPage = () => {
 
         {/* Footer */}
         <p className="text-center text-xs text-slate-500 mt-8">
-          © 2026 KPU Kabupaten Sekadau. All rights reserved.[cite: 1]
+          © 2026 KPU Kabupaten Sekadau. All rights reserved.
         </p>
       </div>
     </div>
