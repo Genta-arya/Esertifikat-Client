@@ -94,7 +94,7 @@ const FormPresensi = () => {
   const emailParam = searchParams.get("email")?.trim().toLowerCase();
 
   const [activeTab, setActiveTab] = useState(
-    emailParam ? "sertifikat" : "presensi"
+    emailParam ? "sertifikat" : "presensi",
   );
 
   const [kegiatan, setKegiatan] = useState(null);
@@ -119,15 +119,13 @@ const FormPresensi = () => {
   const [generatedNomor, setGeneratedNomor] = useState("");
 
   const [searchCertificateEmail, setSearchCertificateEmail] = useState(
-    emailParam || ""
+    emailParam || "",
   );
 
-  const [isSearchingCertificate, setIsSearchingCertificate] =
-    useState(false);
+  const [isSearchingCertificate, setIsSearchingCertificate] = useState(false);
 
   const [certificateResult, setCertificateResult] = useState(null);
-  const [certificateSearchMessage, setCertificateSearchMessage] =
-    useState("");
+  const [certificateSearchMessage, setCertificateSearchMessage] = useState("");
 
   const currentYear = new Date().getFullYear();
 
@@ -151,7 +149,7 @@ const FormPresensi = () => {
         } else {
           const kegiatanQuery = query(
             collection(db, "kegiatan"),
-            where("slug", "==", slug)
+            where("slug", "==", slug),
           );
 
           const querySnap = await getDocs(kegiatanQuery);
@@ -180,7 +178,7 @@ const FormPresensi = () => {
 
         const formFields = data?.formConfig?.fields || [];
         const instansiField = formFields.find(
-          (field) => field.key === "instansi"
+          (field) => field.key === "instansi",
         );
 
         const configuredOptions = Array.isArray(instansiField?.options)
@@ -190,24 +188,16 @@ const FormPresensi = () => {
               .filter(
                 (option) =>
                   option.toLowerCase() !==
-                  OTHER_INSTITUTION_LABEL.toLowerCase()
+                  OTHER_INSTITUTION_LABEL.toLowerCase(),
               )
           : [];
 
         setInstansiOptions(configuredOptions);
 
         if (emailParam) {
-          const pesertaRef = collection(
-            db,
-            "kegiatan",
-            docId,
-            "peserta"
-          );
+          const pesertaRef = collection(db, "kegiatan", docId, "peserta");
 
-          const qEmail = query(
-            pesertaRef,
-            where("email", "==", emailParam)
-          );
+          const qEmail = query(pesertaRef, where("email", "==", emailParam));
 
           const pesertaSnap = await getDocs(qEmail);
 
@@ -244,7 +234,7 @@ const FormPresensi = () => {
             });
           } else {
             toast.error(
-              `Data peserta dengan email "${emailParam}" belum ditemukan.`
+              `Data peserta dengan email "${emailParam}" belum ditemukan.`,
             );
 
             setSearchParams({});
@@ -366,24 +356,23 @@ const FormPresensi = () => {
       const targetDocId = kegiatan.id;
       const pesertaRef = collection(db, "kegiatan", targetDocId, "peserta");
 
-      // VALIDASI DOUBLE ABSEN: Cek apakah email sudah terdaftar sebelumnya di kegiatan ini
-      const checkExistingQuery = query(pesertaRef, where("email", "==", emailClean));
-      const existingSnap = await getDocs(checkExistingQuery);
-
-      if (!existingSnap.empty) {
-        toast.error("Email ini sudah pernah melakukan presensi untuk kegiatan tersebut.");
-        setIsSubmitting(false);
-        return;
-      }
-
-      const kodeUndangan = kegiatan?.kodeUndangan || "KPU-SKD";
+      // Menggunakan emailClean sebagai ID dokumen untuk pencegahan mutlak double absen
+      const newPesertaDocRef = doc(pesertaRef, emailClean);
       const counterDocRef = doc(db, "counters", `sertifikat_${currentYear}`);
-      const newPesertaDocRef = doc(pesertaRef);
       const kegiatanRef = doc(db, "kegiatan", targetDocId);
+      const kodeUndangan = kegiatan?.kodeUndangan || "KPU-SKD";
 
       let finalNomorResmi = "";
 
       await runTransaction(db, async (transaction) => {
+        // Cek langsung di dalam transaksi apakah email sudah ada
+        const existingPesertaSnap = await transaction.get(newPesertaDocRef);
+        if (existingPesertaSnap.exists()) {
+          throw new Error(
+            "Email ini sudah pernah melakukan presensi untuk kegiatan tersebut.",
+          );
+        }
+
         const counterSnap = await transaction.get(counterDocRef);
         const kegiatanSnap = await transaction.get(kegiatanRef);
 
@@ -407,7 +396,7 @@ const FormPresensi = () => {
             lastNumber: nextNum,
             updatedAt: serverTimestamp(),
           },
-          { merge: true }
+          { merge: true },
         );
 
         transaction.set(newPesertaDocRef, {
@@ -428,7 +417,7 @@ const FormPresensi = () => {
       });
 
       const newUrl = `${window.location.pathname}?email=${encodeURIComponent(
-        emailClean
+        emailClean,
       )}`;
       window.history.replaceState(null, "", newUrl);
 
@@ -445,21 +434,28 @@ const FormPresensi = () => {
       });
 
       setSearchCertificateEmail(emailClean);
-      setShowSuccessModal(true); // Tampilkan popup sukses khusus presensi tanpa mengubah tab aktif
+      // data set null
+      setFormData({
+        nama: "",
+        email: "",
+        instansi: "",
+        jabatan: "",
+      });
+      setShowSuccessModal(true);
 
       toast.success("Presensi berhasil dikirim. E-Sertifikat sedang diproses.");
     } catch (error) {
       console.error("Gagal menyimpan presensi:", error);
       toast.error(
         error.message ||
-          "Terjadi kesalahan saat menyimpan presensi. Silakan coba lagi."
+          "Terjadi kesalahan saat menyimpan presensi. Silakan coba lagi.",
       );
     } finally {
       setIsSubmitting(false);
     }
   };
 
-  const handleSearchCertificate = async (event) => {
+const handleSearchCertificate = async (event) => {
     event.preventDefault();
     const emailClean = searchCertificateEmail.trim().toLowerCase();
 
@@ -480,7 +476,7 @@ const FormPresensi = () => {
     }
 
     setIsSearchingCertificate(true);
-    setCertificateResult(null);
+    setCertificateResult(null); // RESET state hasil agar card lama hilang
     setCertificateSearchMessage("");
 
     try {
@@ -489,15 +485,21 @@ const FormPresensi = () => {
       const pesertaSnap = await getDocs(pesertaQuery);
 
       if (pesertaSnap.empty) {
-        setCertificateSearchMessage(
-          "Data peserta tidak ditemukan. Pastikan email yang dimasukkan sama dengan email saat presensi."
-        );
+        const notFoundMsg = "Data peserta tidak ditemukan. Pastikan email yang dimasukkan sama dengan email saat presensi.";
+        
+        setCertificateSearchMessage(notFoundMsg);
+        setCertificateResult(null); 
+        
+        // TAMBAHKAN INI AGAR TOAST MUNCUL
+        toast.error(notFoundMsg);
+        
         return;
       }
 
       const pesertaDoc = pesertaSnap.docs[0];
       const pesertaData = pesertaDoc.data();
 
+      // JIKA KETEMU: Masukkan data ke state
       setCertificateResult({
         id: pesertaDoc.id,
         ...pesertaData,
@@ -511,9 +513,10 @@ const FormPresensi = () => {
       window.history.replaceState(null, "", newUrl);
     } catch (error) {
       console.error("Gagal mencari sertifikat:", error);
-      setCertificateSearchMessage(
-        "Terjadi kesalahan saat mencari sertifikat. Silakan coba lagi."
-      );
+      const errMsg = "Terjadi kesalahan saat mencari sertifikat. Silakan coba lagi.";
+      setCertificateSearchMessage(errMsg);
+      setCertificateResult(null);
+      toast.error(errMsg);
     } finally {
       setIsSearchingCertificate(false);
     }
@@ -537,7 +540,7 @@ const FormPresensi = () => {
   if (kegiatanError) {
     return (
       <div className="min-h-screen bg-stone-100 text-slate-800 flex items-center justify-center p-4">
-        <Toaster position="top-center" richColors />
+        
         <div className="bg-white border border-stone-200 rounded-2xl p-6 text-center max-w-sm w-full space-y-4 shadow-lg shadow-slate-900/5">
           <div className="w-12 h-12 rounded-xl bg-red-50 border border-red-100 text-red-700 flex items-center justify-center mx-auto">
             <AlertCircle className="w-6 h-6" />
@@ -559,22 +562,22 @@ const FormPresensi = () => {
 
   const driveFileId = getDriveFileId(
     certificateResult?.certificateDriveFileId,
-    certificateResult?.certificateDriveUrl
+    certificateResult?.certificateDriveUrl,
   );
 
   const certificatePreviewUrl = getDrivePreviewUrl(
     certificateResult?.certificateDriveFileId,
-    certificateResult?.certificateDriveUrl
+    certificateResult?.certificateDriveUrl,
   );
 
   const certificateViewUrl = getDriveViewUrl(
     certificateResult?.certificateDriveFileId,
-    certificateResult?.certificateDriveUrl
+    certificateResult?.certificateDriveUrl,
   );
 
   const certificateDownloadUrl = getDriveDownloadUrl(
     certificateResult?.certificateDriveFileId,
-    certificateResult?.certificateDriveUrl
+    certificateResult?.certificateDriveUrl,
   );
 
   const isCertificateReady =
@@ -584,8 +587,6 @@ const FormPresensi = () => {
 
   return (
     <div className="min-h-screen bg-stone-100 text-slate-800">
-    
-
       {/* Modal Popup Sukses Berhasil Presensi */}
       {showSuccessModal && (
         <div className="fixed inset-0 z-50 bg-slate-950/45 backdrop-blur-sm flex items-center justify-center p-4">
@@ -598,7 +599,12 @@ const FormPresensi = () => {
                 Presensi Berhasil Dikirim!
               </h3>
               <p className="text-xs text-slate-500 mt-1.5 leading-relaxed">
-                Data Anda telah tercatat dan e-sertifikat sedang diproses oleh sistem. Anda dapat melihat status atau mengunduhnya melalui menu <span className="font-semibold text-slate-700">Cari Sertifikat</span>.
+                Data Anda telah tercatat dan e-sertifikat sedang diproses oleh
+                sistem. Anda dapat melihat status atau mengunduhnya melalui menu{" "}
+                <span className="font-semibold text-slate-700">
+                  Cari Sertifikat
+                </span>
+                .
               </p>
             </div>
             <button
@@ -627,7 +633,8 @@ const FormPresensi = () => {
                     Konfirmasi Data Peserta
                   </h3>
                   <p className="text-xs text-slate-500 mt-1 leading-relaxed">
-                    Pastikan nama dan email benar. Data akan digunakan untuk penerbitan serta pengiriman e-sertifikat.
+                    Pastikan nama dan email benar. Data akan digunakan untuk
+                    penerbitan serta pengiriman e-sertifikat.
                   </p>
                 </div>
               </div>
@@ -727,7 +734,8 @@ const FormPresensi = () => {
                 {kegiatan?.namaKegiatan}
               </h1>
               <p className="text-xs text-slate-500 mt-1.5 leading-relaxed">
-                Silakan isi presensi atau gunakan menu pencarian untuk melihat sertifikat yang telah diterbitkan.
+                Silakan isi presensi atau gunakan menu pencarian untuk melihat
+                sertifikat yang telah diterbitkan.
               </p>
             </div>
           </div>
@@ -972,77 +980,17 @@ const FormPresensi = () => {
               </button>
             </form>
 
-            {certificateSearchMessage && (
-              <div className="bg-red-50 border border-red-200 rounded-xl p-4 flex items-start gap-2">
-                <AlertCircle className="w-4 h-4 text-red-700 mt-0.5 shrink-0" />
-                <p className="text-xs text-red-900 leading-relaxed">
-                  {certificateSearchMessage}
-                </p>
-              </div>
-            )}
+         
 
             {certificateResult && (
-              <div className="bg-white border border-stone-200 rounded-xl p-5 shadow-sm space-y-4">
-                <div className="flex items-start gap-3">
-                  <div
-                    className={`w-10 h-10 shrink-0 rounded-xl border flex items-center justify-center ${
-                      isCertificateReady
-                        ? "bg-emerald-50 border-emerald-200 text-emerald-700"
-                        : certificateStatus === "FAILED"
-                        ? "bg-red-50 border-red-200 text-red-700"
-                        : "bg-amber-50 border-amber-200 text-amber-700"
-                    }`}
-                  >
-                    {isCertificateReady ? (
-                      <FileCheck2 className="w-5 h-5" />
-                    ) : certificateStatus === "FAILED" ? (
-                      <AlertCircle className="w-5 h-5" />
-                    ) : (
-                      <Clock3 className="w-5 h-5" />
-                    )}
-                  </div>
-
-                  <div className="min-w-0">
-                    <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-red-700">
-                      Status E-Sertifikat
-                    </p>
-                    <h3 className="text-sm font-bold text-slate-900 mt-1 break-words">
-                      {certificateResult.nama || "Peserta"}
-                    </h3>
-                    <p className="text-xs text-slate-500 mt-1">
-                      {CERTIFICATE_STATUS_LABELS[certificateStatus] ||
-                        "Status sertifikat sedang diperbarui."}
-                    </p>
-                  </div>
-                </div>
-
-                <div className="bg-stone-50 border border-stone-200 rounded-xl divide-y divide-stone-200 text-xs">
-                  <div className="grid grid-cols-[120px_1fr] gap-3 p-3">
-                    <span className="text-slate-500">Kegiatan</span>
-                    <span className="font-semibold text-slate-800 text-right break-words">
-                      {kegiatan?.namaKegiatan || "-"}
-                    </span>
-                  </div>
-                  <div className="grid grid-cols-[120px_1fr] gap-3 p-3">
-                    <span className="text-slate-500">Nomor Sertifikat</span>
-                    <span className="font-mono font-bold text-red-700 text-right break-all">
-                      {certificateResult.nomorSertifikat || "-"}
-                    </span>
-                  </div>
-                  <div className="grid grid-cols-[120px_1fr] gap-3 p-3">
-                    <span className="text-slate-500">Email</span>
-                    <span className="font-medium text-slate-800 text-right break-all">
-                      {certificateResult.email || "-"}
-                    </span>
-                  </div>
-                </div>
-
+              <>
                 {isCertificateReady ? (
                   <>
                     <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-3 flex items-start gap-2">
                       <CheckCircle2 className="w-4 h-4 text-emerald-700 mt-0.5 shrink-0" />
                       <p className="text-xs text-emerald-900 leading-relaxed">
-                        E-Sertifikat telah tersedia. Anda dapat melihat dokumen di bawah ini atau mengunduh file PDF.
+                        E-Sertifikat telah tersedia. Anda dapat melihat dokumen di
+                        bawah ini atau mengunduh file PDF.
                       </p>
                     </div>
 
@@ -1100,20 +1048,60 @@ const FormPresensi = () => {
                       )}
                     </div>
                   </>
+                ) : certificateStatus === "COMPLETED" ? (
+                  <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 flex items-start gap-2">
+                    <AlertCircle className="w-4 h-4 text-amber-700 mt-0.5 shrink-0" />
+                    <div>
+                      <p className="text-xs font-bold text-amber-900">
+                        Sertifikat selesai diproses, tetapi file belum tersedia.
+                      </p>
+                      <p className="text-xs text-amber-800 mt-1 leading-relaxed">
+                        Silakan coba kembali beberapa saat lagi atau hubungi panitia
+                        kegiatan.
+                      </p>
+                    </div>
+                  </div>
+                ) : certificateStatus === "FAILED" ? (
+                  <div className="bg-red-50 border border-red-200 rounded-xl p-4 flex items-start gap-2">
+                    <AlertCircle className="w-4 h-4 text-red-700 mt-0.5 shrink-0" />
+                    <div>
+                      <p className="text-xs font-bold text-red-900">
+                        Pengiriman Sertifikat Gagal
+                      </p>
+                      <p className="text-xs text-red-800 mt-1 leading-relaxed">
+                        Sistem mendapati kendala saat mengirim email ke alamat yang
+                        Anda daftarkan (kemungkinan alamat email salah ketik, tidak
+                        aktif, atau penuh).
+                      </p>
+                      <p className="text-xs text-red-800 mt-2 leading-relaxed">
+                        Silakan hubungi panitia kegiatan melalui WhatsApp di{" "}
+                        <a
+                          href="https://wa.me/6282197085204"
+                          target="_blank"
+                          rel="noreferrer"
+                          className="font-bold underline text-red-700 hover:text-red-900"
+                        >
+                          0821-9708-5204
+                        </a>{" "}
+                        untuk bantuan perbaikan email atau pengiriman ulang.
+                      </p>
+                    </div>
+                  </div>
                 ) : (
                   <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 flex items-start gap-2">
                     <RefreshCw className="w-4 h-4 text-amber-700 mt-0.5 shrink-0" />
                     <div>
                       <p className="text-xs font-bold text-amber-900">
-                        Sertifikat Belum Siap Ditampilkan
+                        Sertifikat Sedang Dalam Antrean / Diproses
                       </p>
                       <p className="text-xs text-amber-800 mt-1 leading-relaxed">
-                        Sertifikat masih dalam antrean atau sedang diproses. Silakan cek berkala melalui menu pencarian.
+                        Sistem sedang memproses dokumen dan pengiriman email Anda.
+                        Silakan muat ulang beberapa saat lagi.
                       </p>
                     </div>
                   </div>
                 )}
-              </div>
+              </>
             )}
           </section>
         )}
