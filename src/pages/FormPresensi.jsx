@@ -13,6 +13,7 @@ import {
   MailCheck,
   ShieldAlert,
   PencilLine,
+  ChevronDown,
 } from "lucide-react";
 
 import {
@@ -31,6 +32,9 @@ import { Toaster, toast } from "sonner";
 const OTHER_INSTITUTION_VALUE = "__LAINNYA__";
 const OTHER_INSTITUTION_LABEL = "Lainnya";
 
+const KPU_LOGO_URL =
+  "https://upload.wikimedia.org/wikipedia/commons/thumb/4/46/KPU_Logo.svg/1920px-KPU_Logo.svg.png";
+
 const FormPresensi = () => {
   const { slug } = useParams();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -48,14 +52,10 @@ const FormPresensi = () => {
     jabatan: "",
   });
 
-  // Menyimpan pilihan dropdown instansi.
-  // Bisa berupa nama instansi atau OTHER_INSTITUTION_VALUE.
   const [selectedInstansi, setSelectedInstansi] = useState("");
-
-  // Hanya dipakai jika peserta memilih "Lainnya".
   const [instansiLainnya, setInstansiLainnya] = useState("");
-
   const [instansiOptions, setInstansiOptions] = useState([]);
+
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
   const [generatedNomor, setGeneratedNomor] = useState("");
@@ -122,7 +122,8 @@ const FormPresensi = () => {
               .filter(Boolean)
               .filter(
                 (option) =>
-                  option.toLowerCase() !== OTHER_INSTITUTION_LABEL.toLowerCase()
+                  option.toLowerCase() !==
+                  OTHER_INSTITUTION_LABEL.toLowerCase()
               )
           : [];
 
@@ -145,7 +146,6 @@ const FormPresensi = () => {
 
           if (!pesertaSnap.empty) {
             const pesertaData = pesertaSnap.docs[0].data();
-
             const savedInstansi = pesertaData.instansi || "";
 
             setFormData({
@@ -155,8 +155,6 @@ const FormPresensi = () => {
               jabatan: pesertaData.jabatan || "",
             });
 
-            // Bila data instansi lama tidak ada dalam daftar admin,
-            // tampilkan sebagai Lainnya + input manual.
             if (
               configuredOptions.length > 0 &&
               savedInstansi &&
@@ -232,7 +230,6 @@ const FormPresensi = () => {
 
     setInstansiLainnya(value);
 
-    // Nilai manual langsung menjadi nilai instansi final pada formData.
     setFormData((prev) => ({
       ...prev,
       instansi: value,
@@ -311,8 +308,6 @@ const FormPresensi = () => {
         "peserta"
       );
 
-      let finalNomorResmi = "";
-
       const kodeUndangan = kegiatan?.kodeUndangan || "KPU-SKD";
 
       const counterDocRef = doc(
@@ -322,8 +317,9 @@ const FormPresensi = () => {
       );
 
       const newPesertaDocRef = doc(pesertaRef);
-
       const kegiatanRef = doc(db, "kegiatan", targetDocId);
+
+      let finalNomorResmi = "";
 
       await runTransaction(db, async (transaction) => {
         const counterSnap = await transaction.get(counterDocRef);
@@ -358,16 +354,9 @@ const FormPresensi = () => {
         transaction.set(newPesertaDocRef, {
           nama: namaClean,
           email: emailClean,
-
-          // Ini selalu menyimpan nama instansi final.
-          // Jika pilih Lainnya, yang tersimpan adalah hasil input manual.
           instansi: instansiClean,
-
-          // Berguna untuk laporan/admin:
-          // true apabila peserta mengisi instansi manual.
           instansiManual:
             selectedInstansi === OTHER_INSTITUTION_VALUE,
-
           jabatan: jabatanClean,
           nomorSertifikat: finalNomorResmi,
           sertifikatTerkirim: false,
@@ -406,11 +395,11 @@ const FormPresensi = () => {
 
   if (loadingKegiatan) {
     return (
-      <div className="min-h-screen bg-slate-900 text-slate-100 flex items-center justify-center p-4">
-        <div className="flex flex-col items-center gap-3">
-          <Loader2 className="w-8 h-8 text-blue-500 animate-spin" />
-          <p className="text-sm text-slate-400">
-            Memuat form presensi...
+      <div className="min-h-screen bg-stone-100 text-slate-800 flex items-center justify-center p-4">
+        <div className="bg-white border border-stone-200 shadow-sm rounded-2xl p-6 flex flex-col items-center gap-3">
+          <Loader2 className="w-8 h-8 text-red-700 animate-spin" />
+          <p className="text-sm text-slate-600">
+            Memuat formulir presensi...
           </p>
         </div>
       </div>
@@ -419,20 +408,20 @@ const FormPresensi = () => {
 
   if (kegiatanError) {
     return (
-      <div className="min-h-screen bg-slate-900 text-slate-100 flex items-center justify-center p-4">
+      <div className="min-h-screen bg-stone-100 text-slate-800 flex items-center justify-center p-4">
         <Toaster position="top-center" richColors />
 
-        <div className="bg-slate-800/80 border border-slate-700 rounded-3xl p-6 text-center max-w-sm w-full space-y-4 shadow-2xl">
-          <div className="w-12 h-12 rounded-2xl bg-red-500/10 border border-red-500/20 text-red-400 flex items-center justify-center mx-auto">
+        <div className="bg-white border border-stone-200 rounded-2xl p-6 text-center max-w-sm w-full space-y-4 shadow-lg shadow-slate-900/5">
+          <div className="w-12 h-12 rounded-xl bg-red-50 border border-red-100 text-red-700 flex items-center justify-center mx-auto">
             <AlertCircle className="w-6 h-6" />
           </div>
 
           <div>
-            <h2 className="text-base font-bold text-white">
+            <h2 className="text-base font-bold text-slate-900">
               Presensi Tidak Tersedia
             </h2>
 
-            <p className="text-xs text-slate-400 mt-1">
+            <p className="text-xs text-slate-500 mt-1">
               {kegiatanError}
             </p>
           </div>
@@ -443,82 +432,86 @@ const FormPresensi = () => {
 
   if (isSuccess) {
     return (
-      <div className="min-h-screen bg-slate-900 text-slate-100 flex items-center justify-center p-4">
+      <div className="min-h-screen bg-stone-100 text-slate-800 flex items-center justify-center p-4">
         <Toaster position="top-center" richColors />
 
-        <div className="bg-slate-800/90 border border-slate-700/80 rounded-3xl p-6 text-center max-w-sm w-full space-y-4 shadow-2xl">
-          <div className="w-16 h-16 rounded-full bg-green-500/10 border border-green-500/20 text-green-400 flex items-center justify-center mx-auto">
+        <div className="bg-white border border-stone-200 rounded-2xl p-6 text-center max-w-sm w-full space-y-4 shadow-xl shadow-slate-900/5">
+          <div className="w-16 h-16 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-600 flex items-center justify-center mx-auto">
             <MailCheck className="w-8 h-8" />
           </div>
 
           <div className="space-y-1">
-            <h2 className="text-lg font-bold text-white">
-              {emailParam ? "Sertifikat Ditemukan!" : "Presensi Berhasil!"}
+            <p className="text-[10px] font-bold tracking-[0.16em] uppercase text-red-700">
+              KPU Kabupaten Sekadau
+            </p>
+
+            <h2 className="text-lg font-bold text-slate-900">
+              {emailParam ? "Sertifikat Ditemukan" : "Presensi Berhasil"}
             </h2>
 
-            <p className="text-xs text-slate-300">
+            <p className="text-xs text-slate-600">
               Halo,{" "}
-              <span className="text-blue-400 font-semibold">
+              <span className="text-red-700 font-semibold">
                 {formData.nama}
               </span>
               .
             </p>
           </div>
 
-          <div className="bg-slate-900/60 rounded-2xl p-4 text-xs text-slate-400 space-y-2 text-left border border-slate-800">
-            <p className="flex justify-between gap-3">
-              <span>Kegiatan:</span>
-              <span className="font-semibold text-slate-200 text-right">
+          <div className="bg-stone-50 rounded-xl p-4 text-xs text-slate-600 space-y-3 text-left border border-stone-200">
+            <div className="flex justify-between gap-3">
+              <span className="text-slate-500">Kegiatan</span>
+              <span className="font-semibold text-slate-800 text-right">
                 {kegiatan?.namaKegiatan}
               </span>
-            </p>
+            </div>
 
-            <p className="flex justify-between gap-3">
-              <span>Nomor Sertifikat:</span>
-              <span className="font-mono text-blue-400 font-bold text-right">
+            <div className="h-px bg-stone-200" />
+
+            <div className="flex justify-between gap-3">
+              <span className="text-slate-500">Nomor Sertifikat</span>
+              <span className="font-mono text-red-700 font-bold text-right">
                 {generatedNomor}
               </span>
-            </p>
+            </div>
 
-            <p className="flex justify-between gap-3">
-              <span>Email:</span>
-              <span className="font-mono text-slate-200 text-right break-all">
+            <div className="h-px bg-stone-200" />
+
+            <div className="flex justify-between gap-3">
+              <span className="text-slate-500">Email</span>
+              <span className="font-medium text-slate-800 text-right break-all">
                 {formData.email}
               </span>
-            </p>
+            </div>
           </div>
 
-          <div className="bg-blue-500/10 border border-blue-500/20 rounded-2xl p-4 text-left">
+          <div className="bg-red-50 border border-red-100 rounded-xl p-4 text-left">
             <div className="flex items-start gap-2">
-              <MailCheck className="w-4 h-4 text-blue-400 mt-0.5 flex-shrink-0" />
+              <MailCheck className="w-4 h-4 text-red-700 mt-0.5 flex-shrink-0" />
 
-              <p className="text-xs text-blue-100 leading-relaxed">
-                E-Sertifikat Anda sedang diproses secara otomatis dan akan
-                dikirim ke email:
+              <p className="text-xs text-red-900 leading-relaxed">
+                E-Sertifikat sedang diproses otomatis dan akan dikirim ke:
                 <br />
-                <span className="font-semibold text-white">
-                  {formData.email}
-                </span>
-                .
+                <span className="font-semibold">{formData.email}</span>
               </p>
             </div>
           </div>
 
-          <div className="bg-amber-500/10 border border-amber-500/20 rounded-2xl p-4 text-left">
+          <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 text-left">
             <div className="flex items-start gap-2">
-              <ShieldAlert className="w-4 h-4 text-amber-400 mt-0.5 flex-shrink-0" />
+              <ShieldAlert className="w-4 h-4 text-amber-700 mt-0.5 flex-shrink-0" />
 
-              <p className="text-xs text-amber-100 leading-relaxed">
-                Pastikan email Anda aktif dan periksa folder{" "}
-                <span className="font-semibold">Spam/Junk</span> jika email
-                belum diterima dalam beberapa menit.
+              <p className="text-xs text-amber-900 leading-relaxed">
+                Periksa folder <span className="font-semibold">Inbox</span>{" "}
+                dan <span className="font-semibold">Spam/Junk</span> jika
+                email belum diterima dalam beberapa menit.
               </p>
             </div>
           </div>
 
-          <p className="text-[11px] text-slate-400">
-            Anda sudah boleh menutup halaman ini. Proses sertifikat tetap
-            berjalan di server.
+          <p className="text-[11px] text-slate-500">
+            Anda boleh menutup halaman ini. Proses sertifikat tetap berjalan di
+            server.
           </p>
         </div>
       </div>
@@ -526,73 +519,74 @@ const FormPresensi = () => {
   }
 
   return (
-    <div className="min-h-screen bg-slate-900 text-slate-100 flex flex-col mx-auto shadow-2xl border-x border-slate-800 relative">
+    <div className="min-h-screen bg-stone-100 text-slate-800">
       <Toaster position="top-center" richColors />
 
       {showConfirmModal && (
-        <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-slate-800 border border-slate-700 rounded-2xl w-full max-w-sm shadow-2xl overflow-hidden">
+        <div className="fixed inset-0 z-50 bg-slate-950/45 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white border border-stone-200 rounded-2xl w-full max-w-sm shadow-2xl overflow-hidden">
+            <div className="h-1.5 bg-red-700" />
+
             <div className="p-5 space-y-4">
               <div className="flex items-start gap-3">
-                <div className="w-10 h-10 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-400 flex items-center justify-center flex-shrink-0">
+                <div className="w-10 h-10 rounded-xl bg-red-50 border border-red-100 text-red-700 flex items-center justify-center flex-shrink-0">
                   <AlertCircle className="w-5 h-5" />
                 </div>
 
                 <div>
-                  <h3 className="text-sm font-bold text-white">
-                    Pastikan Data Anda Sudah Benar
+                  <h3 className="text-sm font-bold text-slate-900">
+                    Konfirmasi Data Peserta
                   </h3>
 
-                  <p className="text-xs text-slate-400 mt-1">
-                    Data ini akan digunakan untuk penerbitan dan pengiriman
-                    e-sertifikat.
+                  <p className="text-xs text-slate-500 mt-1 leading-relaxed">
+                    Pastikan nama dan email benar. Data akan digunakan untuk
+                    penerbitan serta pengiriman e-sertifikat.
                   </p>
                 </div>
               </div>
 
-              <div className="bg-slate-900/70 border border-slate-700 rounded-xl p-4 space-y-2 text-xs">
-                <div className="flex justify-between gap-3">
-                  <span className="text-slate-400">Nama</span>
-                  <span className="font-semibold text-white text-right break-words">
+              <div className="bg-stone-50 border border-stone-200 rounded-xl divide-y divide-stone-200 text-xs">
+                <div className="grid grid-cols-[90px_1fr] gap-3 p-3">
+                  <span className="text-slate-500">Nama</span>
+                  <span className="font-semibold text-slate-800 text-right break-words">
                     {formData.nama}
                   </span>
                 </div>
 
-                <div className="flex justify-between gap-3">
-                  <span className="text-slate-400">Email</span>
-                  <span className="font-semibold text-white text-right break-all">
+                <div className="grid grid-cols-[90px_1fr] gap-3 p-3">
+                  <span className="text-slate-500">Email</span>
+                  <span className="font-semibold text-slate-800 text-right break-all">
                     {formData.email}
                   </span>
                 </div>
 
-                <div className="flex justify-between gap-3">
-                  <span className="text-slate-400">Instansi</span>
-                  <span className="font-semibold text-white text-right break-words">
+                <div className="grid grid-cols-[90px_1fr] gap-3 p-3">
+                  <span className="text-slate-500">Instansi</span>
+                  <span className="font-semibold text-slate-800 text-right break-words">
                     {formData.instansi}
                   </span>
                 </div>
 
-                <div className="flex justify-between gap-3">
-                  <span className="text-slate-400">Jabatan</span>
-                  <span className="font-semibold text-white text-right break-words">
+                <div className="grid grid-cols-[90px_1fr] gap-3 p-3">
+                  <span className="text-slate-500">Jabatan</span>
+                  <span className="font-semibold text-slate-800 text-right break-words">
                     {formData.jabatan}
                   </span>
                 </div>
               </div>
 
-              <p className="text-[11px] text-slate-400 leading-relaxed">
-                Pastikan <span className="text-white font-semibold">nama</span>{" "}
-                dan <span className="text-white font-semibold">email</span>{" "}
-                sudah benar. E-Sertifikat akan dikirim ke email tersebut.
+              <p className="text-[11px] text-slate-500 leading-relaxed">
+                Setelah dikirim, data presensi dan nomor sertifikat akan
+                diterbitkan. Pastikan tidak ada kesalahan penulisan.
               </p>
             </div>
 
-            <div className="grid grid-cols-2 border-t border-slate-700">
+            <div className="grid grid-cols-2 border-t border-stone-200">
               <button
                 type="button"
                 onClick={() => setShowConfirmModal(false)}
                 disabled={isSubmitting}
-                className="py-3 text-xs font-semibold text-slate-300 hover:bg-slate-700/50 transition-colors disabled:opacity-50"
+                className="py-3.5 text-xs font-semibold text-slate-600 hover:bg-stone-50 transition-colors disabled:opacity-50"
               >
                 Periksa Lagi
               </button>
@@ -601,7 +595,7 @@ const FormPresensi = () => {
                 type="button"
                 onClick={handleSubmitPresensi}
                 disabled={isSubmitting}
-                className="py-3 text-xs font-bold text-white bg-blue-600 hover:bg-blue-500 transition-colors disabled:opacity-60 flex items-center justify-center gap-2"
+                className="py-3.5 text-xs font-bold text-white bg-red-700 hover:bg-red-800 transition-colors disabled:opacity-60 flex items-center justify-center gap-2"
               >
                 {isSubmitting ? (
                   <>
@@ -611,7 +605,7 @@ const FormPresensi = () => {
                 ) : (
                   <>
                     <CheckCircle2 className="w-4 h-4" />
-                    Ya, Kirim Sekarang
+                    Kirim Presensi
                   </>
                 )}
               </button>
@@ -620,188 +614,246 @@ const FormPresensi = () => {
         </div>
       )}
 
-      {kegiatan?.bannerUrl ? (
-        <img
-          src={kegiatan.bannerUrl}
-          alt={kegiatan.namaKegiatan}
-          className="w-full object-cover border-b border-slate-700/60 shadow-lg"
-        />
-      ) : (
-        <div className="w-full h-24 bg-gradient-to-r from-blue-600 to-indigo-600 p-4 flex items-center justify-center text-center">
-          <h2 className="text-sm font-bold text-white">
-            {kegiatan?.namaKegiatan}
-          </h2>
-        </div>
-      )}
+      
 
-      <div className="space-y-3 px-4 mb-4 mt-8">
-        <div className="bg-slate-800/50 border border-slate-700/50 rounded-2xl p-4 space-y-1">
-          <span className="text-[10px] font-bold text-blue-400 uppercase tracking-wider flex items-center gap-1">
-            <Calendar className="w-3 h-3" />
-            Formulir Kehadiran
-          </span>
-
-          <h2 className="text-base font-bold text-white leading-snug">
-            {kegiatan?.namaKegiatan}
-          </h2>
-
-          <p className="text-xs text-slate-400">
-            Silakan isi data diri Anda secara benar untuk penerbitan sertifikat.
-          </p>
-        </div>
-      </div>
-
-      <form
-        onSubmit={handleOpenConfirmation}
-        className="p-4 pt-0 space-y-4 flex-1 pb-10"
-      >
-        <div className="space-y-1.5">
-          <label className="text-xs font-bold text-slate-300 uppercase tracking-wider">
-            Nama Lengkap <span className="text-red-400">*</span>
-          </label>
-
-          <div className="relative">
-            <User className="w-4 h-4 text-slate-400 absolute left-3.5 top-3.5" />
-
-            <input
-              type="text"
-              name="nama"
-              maxLength={60}
-              placeholder="Contoh: Dr. xxxx"
-              value={formData.nama}
-              onChange={handleChange}
-              className="w-full pl-10 pr-4 py-3 bg-slate-800/90 border border-slate-700/80 rounded-xl text-xs text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500/50 transition-all"
-              required
+      <main className="max-w-xl mx-auto pb-10">
+        {kegiatan?.bannerUrl ? (
+          <div className="px-4 pt-4">
+            <img
+              src={kegiatan.bannerUrl}
+              alt={kegiatan.namaKegiatan}
+              className="w-full max-h-80 object-cover rounded-xl border border-stone-200 shadow-sm"
             />
+          </div>
+        ) : (
+          <div className="mx-4 mt-4 rounded-xl overflow-hidden border border-red-900">
+            <div className="bg-red-700 px-5 py-6 text-center">
+              <p className="text-[10px] tracking-[0.16em] font-bold uppercase text-red-100">
+                Formulir Kehadiran
+              </p>
+              <h2 className="mt-2 text-base font-bold text-white">
+                {kegiatan?.namaKegiatan}
+              </h2>
+            </div>
+          </div>
+        )}
+
+        <div className="mx-4 mt-4 bg-white border border-stone-200 rounded-xl p-5 shadow-sm">
+          <div className="flex items-start gap-3">
+            <div className="w-9 h-9 shrink-0 rounded-lg bg-red-50 border border-red-100 text-red-700 flex items-center justify-center">
+              <Calendar className="w-4 h-4" />
+            </div>
+
+            <div>
+              <span className="text-[10px] font-bold text-red-700 uppercase tracking-[0.13em]">
+                Formulir Kehadiran
+              </span>
+
+              <h2 className="text-base font-bold text-slate-900 leading-snug mt-1">
+                {kegiatan?.namaKegiatan}
+              </h2>
+
+              <p className="text-xs text-slate-500 mt-1.5 leading-relaxed">
+                Silakan lengkapi data diri dengan benar. Data digunakan untuk
+                penerbitan dan pengiriman e-sertifikat.
+              </p>
+            </div>
           </div>
         </div>
 
-        <div className="space-y-1.5">
-          <label className="text-xs font-bold text-slate-300 uppercase tracking-wider">
-            Alamat Email <span className="text-red-400">*</span>
-          </label>
+        <form
+          onSubmit={handleOpenConfirmation}
+          className="mx-4 mt-4 bg-white border border-stone-200 rounded-xl p-5 shadow-sm space-y-5"
+        >
+          <div className="flex items-center gap-2 pb-3 border-b border-stone-200">
+            <span className="w-6 h-6 animate-pulse rounded-full bg-red-700 text-white text-[11px] font-bold flex items-center justify-center">
+              1
+            </span>
 
-          <div className="relative">
-            <Mail className="w-4 h-4 text-slate-400 absolute left-3.5 top-3.5" />
-
-            <input
-              type="email"
-              name="email"
-              placeholder="nama@email.com"
-              value={formData.email}
-              onChange={handleChange}
-              className="w-full pl-10 pr-4 py-3 bg-slate-800/90 border border-slate-700/80 rounded-xl text-xs text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500/50 transition-all"
-              required
-            />
+            <div>
+              <p className="text-sm font-bold text-slate-900">
+                Data Peserta
+              </p>
+              <p className="text-[11px] text-slate-500">
+                Kolom bertanda bintang wajib diisi.
+              </p>
+            </div>
           </div>
-        </div>
 
-        <div className="space-y-1.5">
-          <label className="text-xs font-bold text-slate-300 uppercase tracking-wider">
-            Instansi / Lembaga <span className="text-red-400">*</span>
-          </label>
+          <div className="space-y-1.5">
+            <label className="text-xs font-bold text-slate-700">
+              Nama Lengkap <span className="text-red-700">*</span>
+            </label>
 
-          <div className="relative">
-            <Building2 className="w-4 h-4 text-slate-400 absolute left-3.5 top-3.5 z-10" />
+            <div className="relative">
+              <User className="w-4 h-4 text-slate-400 absolute left-3.5 top-3.5" />
 
-            {instansiOptions.length > 0 ? (
-              <select
-                name="instansi"
-                value={selectedInstansi}
-                onChange={handleInstansiChange}
-                className="w-full pl-10 pr-4 py-3 bg-slate-800/90 border border-slate-700/80 rounded-xl text-xs text-white focus:outline-none focus:ring-2 focus:ring-blue-500/50 transition-all"
-                required
-              >
-                <option value="">Pilih Instansi / Lembaga</option>
-
-                {instansiOptions.map((option) => (
-                  <option key={option} value={option}>
-                    {option}
-                  </option>
-                ))}
-
-                <option value={OTHER_INSTITUTION_VALUE}>
-                  {OTHER_INSTITUTION_LABEL}
-                </option>
-              </select>
-            ) : (
               <input
                 type="text"
-                name="instansi"
-                placeholder="Contoh: KPU Kabupaten Sekadau"
-                value={formData.instansi}
+                name="nama"
+                maxLength={60}
+                placeholder="Contoh: Dr. Nama Peserta"
+                value={formData.nama}
                 onChange={handleChange}
-                className="w-full pl-10 pr-4 py-3 bg-slate-800/90 border border-slate-700/80 rounded-xl text-xs text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500/50 transition-all"
+                className="w-full pl-10 pr-4 py-3 bg-white border border-stone-300 rounded-lg text-sm text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-red-700/20 focus:border-red-700 transition-all"
                 required
               />
-            )}
+            </div>
           </div>
 
-          {instansiOptions.length > 0 &&
-            selectedInstansi === OTHER_INSTITUTION_VALUE && (
-              <div className="relative pt-1">
-                <PencilLine className="w-4 h-4 text-blue-400 absolute left-3.5 top-4" />
+          <div className="space-y-1.5">
+            <label className="text-xs font-bold text-slate-700">
+              Alamat Email <span className="text-red-700">*</span>
+            </label>
 
+            <div className="relative">
+              <Mail className="w-4 h-4 text-slate-400 absolute left-3.5 top-3.5" />
+
+              <input
+                type="email"
+                name="email"
+                placeholder="nama@email.com"
+                value={formData.email}
+                onChange={handleChange}
+                className="w-full pl-10 pr-4 py-3 bg-white border border-stone-300 rounded-lg text-sm text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-red-700/20 focus:border-red-700 transition-all"
+                required
+              />
+            </div>
+
+            <p className="text-[10px] text-slate-500">
+              E-sertifikat akan dikirim ke alamat email ini.
+            </p>
+          </div>
+
+          <div className="space-y-1.5">
+            <label className="text-xs font-bold text-slate-700">
+              Instansi / Lembaga <span className="text-red-700">*</span>
+            </label>
+
+            <div className="relative">
+              <Building2 className="w-4 h-4 text-slate-400 absolute left-3.5 top-3.5 z-10 pointer-events-none" />
+
+              {instansiOptions.length > 0 ? (
+                <>
+                  <select
+                    name="instansi"
+                    value={selectedInstansi}
+                    onChange={handleInstansiChange}
+                    className="appearance-none w-full pl-10 pr-10 py-3 bg-white border border-stone-300 rounded-lg text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-red-700/20 focus:border-red-700 transition-all"
+                    required
+                  >
+                    <option value="">Pilih Instansi / Lembaga</option>
+
+                    {instansiOptions.map((option) => (
+                      <option key={option} value={option}>
+                        {option}
+                      </option>
+                    ))}
+
+                    <option value={OTHER_INSTITUTION_VALUE}>
+                      {OTHER_INSTITUTION_LABEL}
+                    </option>
+                  </select>
+
+                  <ChevronDown className="w-4 h-4 text-slate-400 absolute right-3.5 top-3.5 pointer-events-none" />
+                </>
+              ) : (
                 <input
                   type="text"
-                  name="instansiLainnya"
-                  value={instansiLainnya}
-                  onChange={handleInstansiLainnyaChange}
-                  maxLength={120}
-                  placeholder="Tulis nama instansi / lembaga Anda"
-                  className="w-full pl-10 pr-4 py-3 bg-slate-800/90 border border-blue-500/50 rounded-xl text-xs text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500/50 transition-all"
+                  name="instansi"
+                  placeholder="Contoh: KPU Kabupaten Sekadau"
+                  value={formData.instansi}
+                  onChange={handleChange}
+                  className="w-full pl-10 pr-4 py-3 bg-white border border-stone-300 rounded-lg text-sm text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-red-700/20 focus:border-red-700 transition-all"
                   required
-                  autoFocus
                 />
-              </div>
+              )}
+            </div>
+
+            {instansiOptions.length > 0 &&
+              selectedInstansi === OTHER_INSTITUTION_VALUE && (
+                <div className="relative pt-1">
+                  <PencilLine className="w-4 h-4 text-red-700 absolute left-3.5 top-4" />
+
+                  <input
+                    type="text"
+                    name="instansiLainnya"
+                    value={instansiLainnya}
+                    onChange={handleInstansiLainnyaChange}
+                    maxLength={120}
+                    placeholder="Tulis nama instansi / lembaga Anda"
+                    className="w-full pl-10 pr-4 py-3 bg-red-50/40 border border-red-300 rounded-lg text-sm text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-red-700/20 focus:border-red-700 transition-all"
+                    required
+                    autoFocus
+                  />
+                </div>
+              )}
+
+            {instansiOptions.length > 0 && (
+              <p className="text-[10px] text-slate-500">
+                Jika instansi tidak tersedia dalam daftar, pilih{" "}
+                <span className="font-semibold text-red-700">Lainnya</span>.
+              </p>
             )}
-
-          {instansiOptions.length > 0 && (
-            <p className="text-[10px] text-slate-500">
-              Jika instansi Anda tidak tersedia, pilih{" "}
-              <span className="text-slate-300 font-semibold">Lainnya</span>.
-            </p>
-          )}
-        </div>
-
-        <div className="space-y-1.5">
-          <label className="text-xs font-bold text-slate-300 uppercase tracking-wider">
-            Jabatan / Peran <span className="text-red-400">*</span>
-          </label>
-
-          <div className="relative">
-            <Briefcase className="w-4 h-4 text-slate-400 absolute left-3.5 top-3.5" />
-
-            <input
-              type="text"
-              name="jabatan"
-              placeholder="Contoh: Anggota / Peserta"
-              value={formData.jabatan}
-              onChange={handleChange}
-              className="w-full pl-10 pr-4 py-3 bg-slate-800/90 border border-slate-700/80 rounded-xl text-xs text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500/50 transition-all"
-              required
-            />
           </div>
-        </div>
 
-        <button
-          type="submit"
-          disabled={isSubmitting}
-          className="w-full py-3.5 mt-2 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-bold rounded-xl shadow-lg shadow-blue-600/30 flex items-center justify-center gap-2 transition-all disabled:opacity-50 active:scale-[0.98] cursor-pointer"
-        >
-          {isSubmitting ? (
-            <>
-              <Loader2 className="w-5 h-5 animate-spin" />
-              <span>Menyimpan Presensi...</span>
-            </>
-          ) : (
-            <>
-              <Send className="w-4 h-4" />
-              <span>Kirim Presensi Sekarang</span>
-            </>
-          )}
-        </button>
-      </form>
+          <div className="space-y-1.5">
+            <label className="text-xs font-bold text-slate-700">
+              Jabatan / Peran <span className="text-red-700">*</span>
+            </label>
+
+            <div className="relative">
+              <Briefcase className="w-4 h-4 text-slate-400 absolute left-3.5 top-3.5" />
+
+              <input
+                type="text"
+                name="jabatan"
+                placeholder="Contoh: Anggota / Peserta"
+                value={formData.jabatan}
+                onChange={handleChange}
+                className="w-full pl-10 pr-4 py-3 bg-white border border-stone-300 rounded-lg text-sm text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-red-700/20 focus:border-red-700 transition-all"
+                required
+              />
+            </div>
+          </div>
+
+          <div className="bg-stone-50 border border-stone-200 rounded-lg p-3 flex items-start gap-2">
+            <ShieldAlert className="w-4 h-4 text-red-700 mt-0.5 shrink-0" />
+
+            <p className="text-[10px] text-slate-600 leading-relaxed">
+              Pastikan nama dan email sudah benar sebelum mengirim presensi.
+              Data tersebut akan digunakan pada e-sertifikat dan proses
+              pengiriman email.
+            </p>
+          </div>
+
+          <button
+            type="submit"
+            disabled={isSubmitting}
+            className="w-full py-3.5 bg-red-700 hover:bg-red-800 text-white font-bold rounded-lg shadow-md shadow-red-900/15 flex items-center justify-center gap-2 transition-all disabled:opacity-60 disabled:cursor-not-allowed active:scale-[0.99]"
+          >
+            {isSubmitting ? (
+              <>
+                <Loader2 className="w-5 h-5 animate-spin" />
+                <span>Menyimpan Presensi...</span>
+              </>
+            ) : (
+              <>
+                <Send className="w-4 h-4" />
+                <span>Kirim Presensi</span>
+              </>
+            )}
+          </button>
+        </form>
+
+        <footer className="px-4 pt-6 text-center">
+          <div className="h-px bg-stone-200 mb-4" />
+          <p className="text-[10px] text-slate-500">
+            © {new Date().getFullYear()} Komisi Pemilihan Umum Kabupaten
+            Sekadau
+          </p>
+        </footer>
+      </main>
     </div>
   );
 };
